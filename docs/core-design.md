@@ -173,3 +173,43 @@ under contention with both CPUs.
 * **Screen flip.** `ctrl[7]` bit 0 and the PC090OJ's own flip bit are
   implemented but unverified: the game never asks for either, even with the
   Flip Screen DIP on.
+
+---
+
+## 7. Timing: the one path that does not close
+
+Quartus 18.1 fits the core comfortably -- 8,715 of 18,480 ALMs, 246 of 308
+RAM blocks -- but **two paths miss setup by 90 ps** on the 96 MHz clock
+(TNS -0.127; the cold corner is -0.230). Everything else has margin: the
+Pocket's own clocks all sit above 2.9 ns.
+
+Both failing paths are inside the tilemap RAM, from one M10K's write-enable
+register to another's address register. The cause is structural: that RAM
+needs three ports -- a read for the CPU, a read for the renderer and a write
+-- and an M10K has two, so Quartus builds all 64 KB twice and sends every
+write to both copies. That write fan-out is the widest in the design, and the
+clock skew across the array is -1.34 ns of the 10.416 ns period.
+
+Two things were tried:
+
+* **Registering the write signals** so the fitter has a fabric register to
+  duplicate near each half. This made it *worse*, -0.466 ns: the extra
+  register did not reduce the fan-out, it only moved it. Reverted.
+* **Making the RAM single-copy**, with the CPU borrowing the renderer's read
+  port for the clock its read needs and the renderer stalling for that clock.
+  This is the right shape -- it halves the block RAM and removes the second
+  copy's write entirely -- and it renders every frozen state exactly right
+  with no CPU reads in flight. Under a deliberately brutal stress test (a CPU
+  read every 97 clocks, seventy per scanline, far beyond anything the 68000
+  does) 219 of 76,800 pixels come out one pixel shifted, so something about
+  the stall is still not right. Not shipped.
+
+The stall has to thread a needle: the renderer presents an address in one
+state and consumes the answer in the next, and two of its addresses are
+computed *from* the word it is currently reading -- BG1's column-scroll value
+and the text layer's character number. The version that renders correctly
+freezes the renderer for exactly the clock the CPU takes the port, holds the
+word the port was answering, and hands it over on the following clock while
+the renderer re-presents the address it could not issue. That is in the
+history; what it still gets wrong is worth finding, because it closes timing
+and frees fifty block RAMs.

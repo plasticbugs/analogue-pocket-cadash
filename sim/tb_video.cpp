@@ -165,8 +165,35 @@ int main(int argc, char **argv) {
     bool overrun = false;
     while (!(dut->vblank) && guard++ < 4000000) tick();
 
+    // While the frame is being rendered, read VRAM through the CPU port the
+    // way the 68000 does.  The renderer shares that port and stalls for the
+    // two clocks each read takes, so this is what proves the sharing is
+    // transparent: the reads have to come back right *and* the picture has to
+    // be unchanged.
+    long reads = 0, bad_reads = 0;
+    int  probe = 0, pending_addr = -1;
+    int  probe_every = getenv("NOPROBE") ? 0 : 97;
+
     int prev_v = -1, x = 0;
     for (int dots = 0; dots < 262 * 436 + 4; ) {
+        // A CPU read is asserted for one clock and answered on the next, so
+        // it rides along with the normal loop rather than stealing ticks.
+        if (pending_addr >= 0) {
+            if (dut->cpu_dout != st.scn[pending_addr]) {
+                if (bad_reads < 4)
+                    printf("VRAM read %04x: got %04x, expected %04x\n",
+                           pending_addr, dut->cpu_dout, st.scn[pending_addr]);
+                bad_reads++;
+            }
+            reads++;
+            pending_addr = -1;
+            dut->vram_cs = 0;
+        } else if (probe_every && (probe % probe_every) == 0) {
+            pending_addr = (probe / probe_every * 1237) & 0x7fff;
+            dut->vram_cs = 1; dut->cpu_we = 0; dut->cpu_addr = pending_addr;
+        }
+        probe++;
+
         bool was_ce = dut->ce_pix;
         tick();
         if (was_ce) {
@@ -196,9 +223,10 @@ int main(int argc, char **argv) {
         fclose(of);
     }
 
+    printf("%ld CPU reads through the shared port, %ld wrong\n", reads, bad_reads);
     printf("%d px, worst line %d clocks (tilemaps %d, sprites %d) of 6104%s\n",
            captured, worst_line, worst_tile, worst_obj,
            overrun ? "  OVERRUN" : "");
     delete dut;
-    return (captured == W * H && !overrun) ? 0 : 1;
+    return (captured == W * H && !overrun && bad_reads == 0) ? 0 : 1;
 }

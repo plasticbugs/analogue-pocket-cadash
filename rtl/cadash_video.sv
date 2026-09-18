@@ -80,30 +80,6 @@ module cadash_video (
         end
     end
 
-    // -------------------------------------------------- the CPU's write port
-    // The 64 KB of tilemap RAM needs a read port for the CPU and another for
-    // the renderer, which is one more than an M10K has, so Quartus builds it
-    // twice and every write goes to both copies.  That makes the write signals
-    // the widest fan-out in the core, and taking them straight from the
-    // address decode was the one path in the whole design that missed timing.
-    // Registering them here gives the fitter a fabric register it can
-    // duplicate near each half of the array; the extra clock costs nothing,
-    // because a 68000 bus cycle is twenty-four of them.
-    (* maxfan = 16 *) logic        wr_q;
-    (* maxfan = 16 *) logic [14:0] wa_q;
-                      logic [15:0] wd_q;
-    (* maxfan = 16 *) logic  [1:0] wb_q;
-    logic sp_wr_q, pl_wr_q;
-
-    always_ff @(posedge clk) begin
-        wr_q    <= vram_cs && cpu_we;
-        sp_wr_q <= spr_cs  && cpu_we;
-        pl_wr_q <= pal_cs  && cpu_we && (cpu_addr[1:0] == 2'd1);
-        wa_q    <= cpu_addr;
-        wd_q    <= cpu_din;
-        wb_q    <= cpu_ds;
-    end
-
     // ---------------------------------------------------------- TC0100SCN RAM
     // 32768 x 16, byte enables, one port for the CPU and one for the renderer.
     // Packed 2D so Quartus infers byte enables rather than a wall of registers.
@@ -112,9 +88,9 @@ module cadash_video (
     logic     [14:0] tm_vaddr;
 
     always_ff @(posedge clk) begin
-        if (wr_q) begin
-            if (wb_q[1]) vram[wa_q][1] <= wd_q[15:8];
-            if (wb_q[0]) vram[wa_q][0] <= wd_q[7:0];
+        if (vram_cs && cpu_we) begin
+            if (cpu_ds[1]) vram[cpu_addr][1] <= cpu_din[15:8];
+            if (cpu_ds[0]) vram[cpu_addr][0] <= cpu_din[7:0];
         end
         vram_cpu_q <= vram[cpu_addr];
         vram_ren_q <= vram[tm_vaddr];
@@ -129,9 +105,9 @@ module cadash_video (
     logic     [12:0] copy_addr;
 
     always_ff @(posedge clk) begin
-        if (sp_wr_q) begin
-            if (wb_q[1]) sram[wa_q[12:0]][1] <= wd_q[15:8];
-            if (wb_q[0]) sram[wa_q[12:0]][0] <= wd_q[7:0];
+        if (spr_cs && cpu_we) begin
+            if (cpu_ds[1]) sram[cpu_addr[12:0]][1] <= cpu_din[15:8];
+            if (cpu_ds[0]) sram[cpu_addr[12:0]][0] <= cpu_din[7:0];
         end
         sram_cpu_q  <= sram[cpu_addr[12:0]];
         sram_copy_q <= sram[copy_addr];
@@ -176,10 +152,10 @@ module cadash_video (
     always_ff @(posedge clk) begin
         if (reset) begin
             pal_addr <= '0;
-        end else if (pal_cs && cpu_we && cpu_addr[1:0] == 2'd0) begin
-            pal_addr <= cpu_din[11:0];
+        end else if (pal_cs && cpu_we) begin
+            if (cpu_addr[1:0] == 2'd0) pal_addr <= cpu_din[11:0];
+            if (cpu_addr[1:0] == 2'd1) pal[pal_addr] <= cpu_din;
         end
-        if (pl_wr_q) pal[pal_addr] <= wd_q;
         pal_cpu_q <= pal[pal_addr];
         pal_out_q <= pal[pal_rd_idx];
     end

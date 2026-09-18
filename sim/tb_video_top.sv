@@ -22,6 +22,7 @@ module tb_video_top (
     input  logic        vram_cs, ctrl_cs, spr_cs, pal_cs, sprctl_cs,
     input  logic [14:0] cpu_addr,
     input  logic [15:0] cpu_din,
+    output logic [15:0] cpu_dout,
 
     input  logic        tile_we,
     input  logic [16:0] tile_waddr,
@@ -96,7 +97,7 @@ module tb_video_top (
     cadash_video u_video (
         .clk, .reset, .pix_sync(1'b0),
         .vram_cs, .ctrl_cs, .spr_cs, .pal_cs, .sprctl_cs,
-        .cpu_addr, .cpu_din, .cpu_ds(2'b11), .cpu_we, .cpu_dout(),
+        .cpu_addr, .cpu_din, .cpu_ds(2'b11), .cpu_we, .cpu_dout,
         .tile_req, .tile_addr, .tile_ack, .tile_q,
         .obj_req,  .obj_addr,  .obj_ack,  .obj_q,
         .ce_pix, .red(r), .green(g), .blue(b),
