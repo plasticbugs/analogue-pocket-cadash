@@ -1,0 +1,70 @@
+<misterromdescription>
+    <name>Cadash (World)</name>
+    <setname>cadash</setname>
+    <year>1989</year>
+    <manufacturer>Taito</manufacturer>
+    <category>Arcade</category>
+    <rbf>cadash</rbf>
+
+    <!-- The image the core loads, in four regions with no padding between
+         them.  Every 16-bit quantity is big-endian: the first byte of a word
+         is its high byte, which is how the 68000 is wired on the board.
+
+           0x000000  524288  68000 program, even/odd ROMs interleaved into words
+           0x080000   65536  Z80 sound program, four 16 KB banks
+           0x090000  524288  TC0100SCN tile graphics, 8x8x4 packed
+           0x110000  524288  PC090OJ sprite graphics, 16x16x4 packed
+           0x190000          total, 1,638,400 bytes
+
+         Both graphics ROMs carry packed 4bpp data, where one byte is two
+         horizontally adjacent pixels, left pixel in the high nibble, so an
+         8-pixel row of a character is already four consecutive bytes and
+         needs no plane interleaving.  What it does need is the byte swap that
+         MAME's ROM_LOAD16_WORD_SWAP applies: file byte i belongs at offset
+         i xor 1.  That is what map="21" does to a single part.  With it, the
+         core reads a whole tile row as one aligned 32-bit word.
+
+         The HD64180 link ROM (c21-07.57) and the four PAL dumps are not in
+         the image: this core does not implement two-cabinet link play. -->
+
+    <rom index="0" zip="cadash.zip" md5="f3532d7e5cf3727ba1590b83e5bf68ed">
+        <!-- 68000 program, 512 KB -->
+        <interleave output="16">
+            <part name="c21_14.ic11" crc="5daf13fb" map="10"/>
+            <part name="c21_16.ic15" crc="cbaa2e75" map="01"/>
+        </interleave>
+        <interleave output="16">
+            <part name="c21_13.ic10" crc="6b9e0ee9" map="10"/>
+            <part name="c21_17.ic14" crc="bf9a578a" map="01"/>
+        </interleave>
+
+        <!-- Z80 sound program, 64 KB -->
+        <part name="c21-08.38" crc="dca495a0"/>
+
+        <!-- TC0100SCN tile graphics, 512 KB -->
+        <interleave output="16">
+            <part name="c21-02.9" crc="205883b9" map="21"/>
+        </interleave>
+
+        <!-- PC090OJ sprite graphics, 512 KB -->
+        <interleave output="16">
+            <part name="c21-01.1" crc="1ff6f39c" map="21"/>
+        </interleave>
+    </rom>
+
+    <!-- Both DIP banks are active low, so a switch "off" is a 1 bit; the
+         defaults below are the board's factory settings.  Communication Mode
+         is deliberately absent: a single cabinet can only be Stand alone, and
+         this core does not implement the link. -->
+    <switches default="ff,ff" base="0">
+        <dip name="Unused"        bits="0"     ids="On,Off"/>
+        <dip name="Flip Screen"   bits="1"     ids="On,Off"/>
+        <dip name="Service Mode"  bits="2"     ids="On,Off"/>
+        <dip name="Demo Sounds"   bits="3"     ids="Off,On"/>
+        <dip name="Coin A"        bits="4,5"   ids="4C/1C,3C/1C,2C/1C,1C/1C"/>
+        <dip name="Coin B"        bits="6,7"   ids="1C/6C,1C/4C,1C/3C,1C/2C"/>
+        <dip name="Difficulty"    bits="8,9"   ids="Hardest,Hard,Easy,Medium"/>
+        <dip name="Starting Time" bits="10,11" ids="5:00,6:00,8:00,7:00"/>
+        <dip name="Added Time"    bits="12,13" ids="Default -2:00,Default -1:00,Default +1:00,Default"/>
+    </switches>
+</misterromdescription>
