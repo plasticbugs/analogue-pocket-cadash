@@ -21,9 +21,9 @@ image) targets the World set and shares the rest.
 
 | Board part | Implementation | Status |
 |---|---|---|
-| MC68000 @ 16 MHz (main CPU) | `rtl/cadash_main.sv` + fx68k | runs the real program; boots in the whole-machine bench |
+| MC68000 @ 16 MHz (main CPU) | `rtl/cadash_main.sv` + fx68k | boots through the self-test to the title screen |
 | Z80 @ 4 MHz (sound CPU) | `rtl/cadash_sound.sv` + TV80 | runs; banked through the YM2151's CT1/CT2 pins as the board does |
-| YM2151 @ 4 MHz (FM) | `rtl/cadash_sound.sv` + JT51 | instantiated, not yet checked against MAME's audio |
+| YM2151 @ 4 MHz (FM) | `rtl/cadash_sound.sv` + JT51 | the Z80 writes it; the output has not been compared with MAME |
 | TC0100SCN (tilemaps + text) | `rtl/tilemap_line.sv` | renders every frozen state exactly as the MAME-verified reference does |
 | PC090OJ (sprites) | `rtl/sprite_line.sv` | as above |
 | TC0110PCR (palette) | `rtl/cadash_video.sv` | as above |
@@ -62,11 +62,17 @@ What is actually proven, and how:
   modelled graphics-ROM latency of 20 clocks (`docs/core-design.md` §5). That
   is the figure the SDRAM controller will have to beat once both CPUs are
   competing for it.
-* **The whole machine boots in simulation.** `sim/run_system.sh` runs both
-  CPUs on the real program against a model of the Pocket's SDRAM: the 68000
-  never halts and the picture fills. What has *not* been checked is whether
-  the frames it produces match MAME's frame for frame, and the sound has not
-  been compared with MAME at all.
+* **The whole machine reaches MAME's title screen, pixel for pixel.**
+  `sim/run_boot.sh` runs both CPUs on the real program from reset for 150
+  frames against a model of the Pocket's SDRAM and diffs the frame that comes
+  out against MAME's: **byte-identical**. That is all four Taito customs, the
+  memory map, both interrupts and the two CPUs together, checked against the
+  oracle rather than against themselves. The comparison does not depend on
+  the two machines counting frames the same way, because MAME holds the title
+  screen still from frame 127 to frame 430.
+* **Sound has not been compared with MAME at all.** The Z80 runs and writes
+  the YM2151 tens of thousands of times, but nothing yet says the output is
+  right, and no music has been heard in simulation.
 * **It has never run on hardware.** Quartus 18.1 builds it, but no bitstream
   has been loaded on a Pocket, so nothing below simulation is proven: not the
   SDRAM timing, not the video hand-off, not the controls.
@@ -123,6 +129,8 @@ platform integration has not been started.
 ```sh
 sh tools/regress_render.sh     # reference renderer vs MAME's own snapshots, ten states
 sh sim/run_video.sh            # video RTL vs the reference renderer, same states
+sh sim/run_boot.sh             # the whole machine from reset vs MAME's title screen
+sh sim/lint.sh                 # every module linted on its own
 ```
 
 `regress_render.sh` is pure Python; it builds a ROM image with
@@ -133,11 +141,14 @@ embedded in each state file. `sim/run_video.sh` additionally needs
 [Verilator](https://www.veripool.org/verilator/); it builds `rtl/`, loads
 each frozen state through the video chips' own CPU-side ports, and diffs the
 rendered palette indices against `render_model.py`'s output using
-`tools/diff_index.py`. This second gate is where the project currently
-stands: it runs, but does not yet pass — see "Status" above.
+`tools/diff_index.py`. `sim/run_boot.sh` is the slow one: it runs both CPUs
+for 150 frames, which is a quarter of a billion clocks and a few minutes, and
+compares the frame the machine reaches with MAME's. `docs/verification.md`
+says what each gate is worth and what none of them covers.
 
-The ten states in `ref/states/` are already captured and committed; to
-recapture them from a fresh MAME run, `tools/dump_states.sh` drives MAME
+The ten states in `ref/states/` are **not** committed -- they are derived from
+the user's own romset. `tools/dump_states.sh` captures them in about a
+minute: it drives MAME
 headless (`tools/mame.sh`) through `tools/dump_state.lua`, picking the
 frames `tools/probe_sprites.lua` found interesting in a 75-second survey —
 the title screen, several points in the attract loop, and the two frames
@@ -151,7 +162,8 @@ interrogate rather than a reference you read, a reference renderer as the
 executable spec, and frozen-state benches as the regression gate that
 catches a video change before it reaches hardware. `docs/hardware.md` and
 `docs/core-design.md` are the products of phases 1–3 of that method for this
-board; `rtl/` and `sim/` are phase 4, in progress.
+board; `rtl/`, `sim/` and `target/` are phases 4 and 5. Phase 6, hardware,
+has not begun.
 
 ## Credits
 
