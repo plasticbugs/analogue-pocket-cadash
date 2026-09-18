@@ -23,7 +23,7 @@ image) targets the World set and shares the rest.
 |---|---|---|
 | MC68000 @ 16 MHz (main CPU) | `rtl/cadash_main.sv` + fx68k | boots through the self-test to the title screen |
 | Z80 @ 4 MHz (sound CPU) | `rtl/cadash_sound.sv` + TV80 | runs; banked through the YM2151's CT1/CT2 pins as the board does |
-| YM2151 @ 4 MHz (FM) | `rtl/cadash_sound.sv` + JT51 | the Z80 writes it; the output has not been compared with MAME |
+| YM2151 @ 4 MHz (FM) | `rtl/cadash_sound.sv` + JT51 | plays the same notes as MAME: same key-on count, same bank, peak within 0.3% |
 | TC0100SCN (tilemaps + text) | `rtl/tilemap_line.sv` | renders every frozen state exactly as the MAME-verified reference does |
 | PC090OJ (sprites) | `rtl/sprite_line.sv` | as above |
 | TC0110PCR (palette) | `rtl/cadash_video.sv` | as above |
@@ -70,9 +70,13 @@ What is actually proven, and how:
   oracle rather than against themselves. The comparison does not depend on
   the two machines counting frames the same way, because MAME holds the title
   screen still from frame 127 to frame 430.
-* **Sound has not been compared with MAME at all.** The Z80 runs and writes
-  the YM2151 tens of thousands of times, but nothing yet says the output is
-  right, and no music has been heard in simulation.
+* **The sound matches MAME.** `sim/run_sound.sh` inserts a coin on both sides
+  at frame 120 and records 200 frames. Over that window MAME's sound board
+  writes the YM2151 47,310 times and keys 22 notes; the core writes it 47,444
+  times and keys the same 22. The peak sample is 8,928 against MAME's 8,954,
+  and the worst per-second RMS difference is 4.3%. MAME's attract mode is
+  genuinely silent for at least fourteen seconds, which is why the comparison
+  needs a coin, and which the core matches.
 * **It has never run on hardware.** Quartus 18.1 builds it, but no bitstream
   has been loaded on a Pocket, so nothing below simulation is proven: not the
   SDRAM timing, not the video hand-off, not the controls.
@@ -130,6 +134,8 @@ platform integration has not been started.
 sh tools/regress_render.sh     # reference renderer vs MAME's own snapshots, ten states
 sh sim/run_video.sh            # video RTL vs the reference renderer, same states
 sh sim/run_boot.sh             # the whole machine from reset vs MAME's title screen
+sh sim/run_sound.sh            # the coin sound, core vs MAME, second by second
+sh sim/run_ym.sh               # the YM2151 alone, driven the way the core drives it
 sh sim/lint.sh                 # every module linted on its own
 ```
 
