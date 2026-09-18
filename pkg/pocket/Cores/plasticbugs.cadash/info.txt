@@ -19,9 +19,8 @@ the frozen-state bench checks, and the
 whole machine reaches MAME's title
 screen pixel for pixel from reset.
 
-Two-cabinet link play is not
-implemented; Communication Mode is
-fixed at Stand alone.
+Link play is not implemented;
+Communication Mode is Stand alone.
 
 Controls
 * A / Y   attack
