@@ -105,6 +105,9 @@ int main(int argc, char **argv) {
     int   overrun_count = 0, last_overrun = -1;
     int   worst_line = 0, worst_frame = 0, first_overrun = -1;
     long  snd_nonzero = 0, snd_peak = 0;
+    // the audio, sampled at 48 kHz the way the Pocket takes it
+    std::vector<int16_t> wav;
+    long snd_div = 0;
     std::map<uint32_t, long> pc_hist;
     bool  as_prev = false;
     // a shadow of main RAM, so a read that does not return what was written
@@ -134,6 +137,7 @@ int main(int argc, char **argv) {
         int s = (int16_t)dut->sound;
         if (s) snd_nonzero++;
         if (abs(s) > snd_peak) snd_peak = abs(s);
+        if (++snd_div == 2000) { snd_div = 0; wav.push_back((int16_t)s); }
 
         // where the 68000 spends its time: one sample per bus cycle
         bool as = dut->m68k_as;
@@ -206,6 +210,23 @@ int main(int argc, char **argv) {
                 fwrite(&v, 2, 1, vf);
             }
             fclose(vf);
+        }
+        // a mono 48 kHz WAV, so the sound can be compared with MAME's own
+        // recording the way METHODOLOGY section 4 describes
+        std::string wp = std::string(out_dir) + "/sound.wav";
+        FILE *wf = fopen(wp.c_str(), "wb");
+        if (wf) {
+            uint32_t data = (uint32_t)(wav.size() * 2), rate = 48000;
+            uint32_t riff = 36 + data, fmtlen = 16, byterate = rate * 2;
+            uint16_t fmt = 1, chans = 1, align = 2, bits = 16;
+            fwrite("RIFF", 1, 4, wf); fwrite(&riff, 4, 1, wf);
+            fwrite("WAVEfmt ", 1, 8, wf); fwrite(&fmtlen, 4, 1, wf);
+            fwrite(&fmt, 2, 1, wf); fwrite(&chans, 2, 1, wf);
+            fwrite(&rate, 4, 1, wf); fwrite(&byterate, 4, 1, wf);
+            fwrite(&align, 2, 1, wf); fwrite(&bits, 2, 1, wf);
+            fwrite("data", 1, 4, wf); fwrite(&data, 4, 1, wf);
+            fwrite(wav.data(), 2, wav.size(), wf);
+            fclose(wf);
         }
         std::string p = std::string(out_dir) + "/frame.idx";
         FILE *of = fopen(p.c_str(), "wb");
