@@ -308,11 +308,17 @@ mask means exactly one rule:
 
 > **Sprites draw over both tilemaps, but under the text layer.**
 
-Within the sprite table the *last* sprite drawn wins: MAME walks entries 0 to
-255 forwards when a priority callback is set, and every sprite pixel drawn
-sets the priority byte to 31, which `0xF0` does not block. So sprite 255 is on
-top, not sprite 0, despite the Raine comment in `pc090oj.cpp` saying
-otherwise.
+Within the sprite table the **first** sprite wins, exactly as the Raine notes
+quoted at the top of `pc090oj.cpp` say. MAME walks entries 0 to 255 forwards,
+which looks like the opposite, but `gfx_element::prio_transpen` sets the top
+bit of the priority mask itself (`pmask |= 1 << 31`,
+`ref/mame/drawgfx.cpp:963`) and every pixel a sprite touches has its priority
+byte set to 31, so nothing later can overwrite it.
+
+A pixel is claimed even when the sprite could not be drawn there, so a sprite
+hidden under the text layer still hides the sprites behind it. Measured: with
+"last wins" the frozen states differ from MAME by about 1900 pixels each; with
+"first wins" they are identical.
 
 Pen 0 is transparent in every layer. The bottom tilemap is drawn opaque, so
 its pen 0 shows as palette entry `colour * 16`.
@@ -336,3 +342,76 @@ arcade timing for the chip and is what this core targets; see
   and cannot do it either. The shared RAM is implemented as plain RAM, and the
   Communication Mode DIP is forced to `Stand alone`.
 * **Wide tilemap mode** (`ctrl[6]` bit 4). Cadash never sets it.
+
+---
+
+## 9. Scroll arithmetic, written out
+
+Both background layers work out to the same pair of expressions, for MAME
+bitmap row *y* (16..255) and column *x* (0..319):
+
+    source x = (x + 17 - ctrl_x - rowscroll[y - 8]) & 0x1FF
+    source y = (y -  8 - ctrl_y) & 0x1FF
+
+and BG1 then shifts the sampled row by its column-scroll word:
+
+    source y = (source y - colscroll[source x / 8]) & 0x1FF
+
+The text layer is the same with no scroll tables:
+
+    source x = (x + 17 - ctrl[2]) & 0x1FF
+    source y = (y -  8 - ctrl[5]) & 0x1FF
+
+The `17` and the `8` are MAME's `scrolldx`/`scrolldy` for
+`set_offsets(1, 0)`: `-1 - 16` and `+8`.
+
+Every one of those subtractions is negated twice on the way through MAME —
+once in `restore_scroll`, which stores `-ctrl[n]`, and once in
+`effective_rowscroll`, which returns `m_dx - m_rowscroll[i]`
+(`ref/mame/tilemap.cpp:35`). **Getting the sign wrong is invisible whenever
+the scroll register is a multiple of 512**, which is exactly what the first
+state tested happened to be, and what made the error survive into three later
+states before a frame with an odd scroll value exposed it.
+
+The row-scroll word used for bitmap row *y* is the one the game wrote for
+screen row *y - 8*: `tilemap_update` indexes the table by `j + m_bgscrolly`
+and the draw indexes it by `y - scrolly`, and the two scroll terms cancel.
+
+---
+
+## 10. Reading MAME's output correctly
+
+The reference renderer is checked against `screen:pixels()`, and three
+properties of MAME's own pipeline have to be undone first. All three were
+measured, not assumed, with the controlled experiments in this repository's
+history (write a known value at frame K, watch which frame it appears in).
+
+1. **The picture lags the state by one frame.** `video_manager::frame_update`
+   renders the screen and *then* calls the Lua frame notifier, and
+   `screen_device::update_quads` flips `m_curbitmap` after publishing the
+   texture (`ref/mame/screen.cpp:1792`). So `screen:pixels()` read in callback
+   *N* is the frame drawn from the state as it stood in callback *N-1*.
+
+2. **The sprite table lags by a further frame.** The PC090OJ copies its table
+   at the rising edge of vblank, which `screen_device::vblank_begin` raises
+   *after* `frame_update` has already drawn the frame. So the frame drawn in
+   callback *N-1* used the table as it stood in callback *N-2*.
+
+3. **The palette does not lag at all.** MAME's screens are 16-bit indexed: the
+   bitmap holds palette indices and the lookup happens when the picture is
+   read out. A frame's colours are therefore whatever the palette holds a
+   frame later. This is invisible until the game fades the screen.
+
+`tools/dump_state.lua` writes a state file with all three undone, so
+`tools/render_model.py` can diff it against MAME with no offsets of its own.
+
+Two smaller traps in MAME's Lua, both of which cost time here:
+
+* **Callbacks must be held in globals.** The bindings keep only a weak hold on
+  them, and a chunk's locals become collectable as soon as the autoboot script
+  returns, so a callback stored in a local stops firing a few hundred frames
+  in, silently and with no error.
+* **`install_read_tap` on a range served by an installed read handler** kills
+  the notifier chain outright: nothing errors, the machine runs on, and no
+  callback ever fires again. Shadow write-only registers with write taps
+  instead, and read state back through the chip's own ports.
