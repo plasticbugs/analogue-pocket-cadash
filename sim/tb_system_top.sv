@@ -39,6 +39,13 @@ module tb_system_top (
     // activity counters, so a stuck machine can be told apart from a quiet one
     output logic [31:0] n_ciu_m, n_ciu_s, n_nmi, n_ym, n_z80_wr, n_irq,
     output logic [31:0] n_keyon, n_cen_ym, n_cen_p1,
+    output logic [31:0] n_reg1b, n_reg08, n_reg14, n_reg_other, n_bank,
+    output logic [31:0] n_ciu_s_wr, n_ciu_s_rd,
+    output logic  [1:0] cur_bank,
+
+    // the Z80's bus, so the bench can see where the sound driver is
+    output logic [15:0] z80_addr,
+    output logic        z80_m1,
     output logic [15:0] ym_last_l, ym_last_r,
 
     // the 68000's bus, so the bench can see where it is and what it moved
@@ -143,6 +150,11 @@ module tb_system_top (
 
     assign vcnt    = u_core.vcnt;
 
+    assign cur_bank = u_core.u_sound.bank;
+    assign z80_addr = u_core.u_sound.a;
+    // an instruction fetch: M1 with the memory request active
+    assign z80_m1   = ~u_core.u_sound.m1_n & ~u_core.u_sound.mreq_n
+                      & u_core.u_sound.rfsh_n & ~u_core.u_sound.rd_n;
     assign m68k_addr = u_core.u_main.cpu_addr;
     assign m68k_as   = ~u_core.u_main.as_n;
     assign m68k_rw   = ~u_core.u_main.rw_n;
@@ -153,16 +165,22 @@ module tb_system_top (
 
     logic nmi_d, irq_d;
     logic [7:0] ym_reg;
+    logic [1:0] bank_d;
     always_ff @(posedge clk) begin
         if (reset) begin
             n_ciu_m <= '0; n_ciu_s <= '0; n_nmi <= '0;
             n_ym <= '0; n_z80_wr <= '0; n_irq <= '0;
             n_keyon <= '0; n_cen_ym <= '0; n_cen_p1 <= '0;
+            n_reg1b <= '0; n_reg08 <= '0; n_reg14 <= '0; n_reg_other <= '0;
+            n_bank <= '0; bank_d <= '0;
+            n_ciu_s_wr <= '0; n_ciu_s_rd <= '0;
         end else begin
             if (u_core.m_port_wr || u_core.m_comm_wr || u_core.m_comm_rd)
                 n_ciu_m <= n_ciu_m + 32'd1;
             if (u_core.s_port_wr || u_core.s_comm_wr || u_core.s_comm_rd)
                 n_ciu_s <= n_ciu_s + 32'd1;
+            if (u_core.s_port_wr || u_core.s_comm_wr) n_ciu_s_wr <= n_ciu_s_wr + 32'd1;
+            if (u_core.s_comm_rd)                     n_ciu_s_rd <= n_ciu_s_rd + 32'd1;
             nmi_d <= u_core.ciu_nmi;
             if (u_core.ciu_nmi && !nmi_d) n_nmi <= n_nmi + 32'd1;
             if (u_core.u_sound.sel_ym && u_core.u_sound.mem_wr
@@ -172,14 +190,24 @@ module tb_system_top (
             // what the sound driver actually asks the YM2151 for
             if (u_core.u_sound.sel_ym && u_core.u_sound.mem_wr
                 && u_core.u_sound.acc_first) begin
-                if (!u_core.u_sound.a[0]) ym_reg <= u_core.u_sound.dout;
-                else if (ym_reg == 8'h08 && |u_core.u_sound.dout[6:3])
+                if (!u_core.u_sound.a[0]) begin
+                    ym_reg <= u_core.u_sound.dout;
+                    case (u_core.u_sound.dout)
+                    8'h1b:   n_reg1b <= n_reg1b + 32'd1;
+                    8'h08:   n_reg08 <= n_reg08 + 32'd1;
+                    8'h14:   n_reg14 <= n_reg14 + 32'd1;
+                    default: n_reg_other <= n_reg_other + 32'd1;
+                    endcase
+                end else if (ym_reg == 8'h08 && |u_core.u_sound.dout[6:3])
                     n_keyon <= n_keyon + 32'd1;
             end
             if (u_core.cen_ym)    n_cen_ym <= n_cen_ym + 32'd1;
             if (u_core.cen_ym_p1) n_cen_p1 <= n_cen_p1 + 32'd1;
             ym_last_l <= u_core.u_sound.ym_left;
             ym_last_r <= u_core.u_sound.ym_right;
+
+            bank_d <= u_core.u_sound.bank;
+            if (u_core.u_sound.bank != bank_d) n_bank <= n_bank + 32'd1;
 
             irq_d <= u_core.u_main.irq4;
             if (u_core.u_main.irq4 && !irq_d) n_irq <= n_irq + 32'd1;

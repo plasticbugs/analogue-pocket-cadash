@@ -109,6 +109,8 @@ int main(int argc, char **argv) {
     std::vector<int16_t> wav;
     long snd_div = 0;
     std::map<uint32_t, long> pc_hist;
+    std::map<uint32_t, long> z80_hist;
+    bool z80_m1_prev = false;
     bool  as_prev = false;
     // a shadow of main RAM, so a read that does not return what was written
     // is caught the moment it happens
@@ -172,6 +174,11 @@ int main(int argc, char **argv) {
             }
         }
         done_prev = done_now;
+
+        // where the sound driver is: one sample per instruction fetch
+        bool m1 = dut->z80_m1;
+        if (m1 && !z80_m1_prev && frame >= frames - 4) z80_hist[dut->z80_addr]++;
+        z80_m1_prev = m1;
 
         bool vb = dut->vblank;
         if (vb && !vb_prev) frame++;
@@ -241,6 +248,19 @@ int main(int argc, char **argv) {
            dut->n_irq, dut->n_ciu_m, dut->n_ciu_s);
     printf("Z80: %u NMIs, %u RAM writes, %u YM2151 writes, %u key-ons\n",
            dut->n_nmi, dut->n_z80_wr, dut->n_ym, dut->n_keyon);
+    printf("YM2151 registers selected: 0x1B (bank) %u, 0x08 (key on) %u, "
+           "0x14 (timer) %u, other %u\n",
+           dut->n_reg1b, dut->n_reg08, dut->n_reg14, dut->n_reg_other);
+    printf("Z80 ROM bank: %u changes, now %u\n", dut->n_bank, dut->cur_bank);
+    printf("Z80 PC060HA: %u writes, %u reads\n", dut->n_ciu_s_wr, dut->n_ciu_s_rd);
+    {
+        std::vector<std::pair<long, uint32_t>> top;
+        for (auto &kv : z80_hist) top.push_back({kv.second, kv.first});
+        std::sort(top.rbegin(), top.rend());
+        printf("Z80 busiest fetch addresses over the last four frames:\n");
+        for (size_t i = 0; i < top.size() && i < 10; i++)
+            printf("   %04X  %ld\n", top[i].second, top[i].first);
+    }
     printf("YM2151 enables: %u at 4 MHz, %u at 2 MHz; last output %d / %d\n",
            dut->n_cen_ym, dut->n_cen_p1, (int16_t)dut->ym_last_l,
            (int16_t)dut->ym_last_r);

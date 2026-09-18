@@ -189,6 +189,14 @@ module cadash_sound (
     always_ff @(posedge clk) sound <= ym_mix[16:1];
 
     // ----------------------------------------------------------- PC060HA
+    // Reading the CIU advances its mode, so the byte has to be captured on the
+    // first clock of the access -- before the strobe moves the mode on -- and
+    // that capture is what the Z80 is given.  Handing it the live output
+    // instead gives it the *next* slot's nibble, because the Z80 samples its
+    // data bus at the end of the cycle, a couple of dozen clocks later.
+    logic [7:0] ciu_q;
+    always_ff @(posedge clk) if (sel_ciu && acc_first) ciu_q <= ciu_dout;
+
     assign ciu_din     = dout;
     assign ciu_port_wr = sel_ciu && mem_wr && acc_first && !a[0];
     assign ciu_comm_wr = sel_ciu && mem_wr && acc_first &&  a[0];
@@ -199,7 +207,7 @@ module cadash_sound (
         if      (sel_rom) di = rom_data;
         else if (sel_ram) di = ram_q;
         else if (sel_ym)  di = ym_dout;
-        else if (sel_ciu) di = ciu_dout;
+        else if (sel_ciu) di = ciu_q;
         else              di = 8'hff;
     end
 
