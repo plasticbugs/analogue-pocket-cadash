@@ -23,6 +23,10 @@
 // background opaquely (which also initialises the line buffer), then the top
 // background, then the text layer, which marks the pixels it wrote so the
 // sprite renderer can stay underneath them.
+//
+// Fetching a group and writing one run side by side with a one-group slot
+// between them, so a group costs the larger of its eight pixels and its fetch
+// rather than the sum.
 //------------------------------------------------------------------------------
 `default_nettype none
 
@@ -68,25 +72,29 @@ module tilemap_line (
     wire tx_off  = ctrl6[2];
     wire bottom  = ctrl6[3];            // 1 = BG1 underneath, which Cadash always sets
 
+    // ------------------------------------------------------------ fetcher
     typedef enum logic [3:0] {
-        S_IDLE, S_PASS, S_ROWSC, S_ROWSC_W,
-        S_GROUP, S_COLSC, S_ATTR, S_CODE, S_FETCH, S_BLIT,
-        S_FILL, S_DONE
-    } state_t;
+        G_IDLE, G_PASS, G_ROWSC, G_ROWSC_W,
+        G_GROUP, G_COLSC, G_ATTR, G_CODE, G_FETCH, G_HAND, G_ENDPASS
+    } gstate_t;
 
-    state_t      state;
+    gstate_t     gs;
     logic  [1:0] pass;                  // 0 bottom bg, 1 top bg, 2 text
-    logic        layer_bg1;             // which background this pass is drawing
-    logic        is_text;
-    logic        pass_opaque;
-
-    logic  [8:0] sx;                    // source x of the next pixel
+    logic        layer_bg1, is_text, is_opaque, is_fill;
+    logic  [8:0] sx;                    // source x of the next group
     logic  [8:0] sy;                    // source y for this line, before colscroll
-    logic  [8:0] px;                    // screen x of the next pixel
-    logic  [2:0] k;                     // pixel within the group
-    logic [15:0] attr;
-    logic [31:0] data;
+    logic  [8:0] fpx;                   // screen x the next group starts at
     logic  [8:0] grp_row;               // source y for this group
+    logic [15:0] f_attr;
+    logic [31:0] f_data;
+
+    // the one-group slot between fetcher and blitter
+    logic        slot_full;
+    logic [15:0] p_attr;
+    logic [31:0] p_data;
+    logic  [2:0] p_k0;
+    logic  [8:0] p_px;
+    logic        p_text, p_opaque;
 
     wire [15:0] scroll_x = layer_bg1 ? ctrl1 : ctrl0;
     wire [15:0] scroll_y = layer_bg1 ? ctrl4 : ctrl3;
@@ -96,10 +104,10 @@ module tilemap_line (
     wire        bg_off   = want_bg1 ? bg1_off : bg0_off;
     wire        pass_off = (pass == 2'd2) ? tx_off : bg_off;
 
-    // The group's source row: registered from S_COLSC onwards, but needed one
-    // clock earlier than that so BG1's attribute read can be issued as the
-    // column-scroll word arrives.
-    wire  [8:0] row_sel  = (state == S_COLSC) ? (sy - vram_q[8:0]) : grp_row;
+    // The group's source row: registered from G_COLSC onwards, but needed one
+    // clock earlier so BG1's attribute read can be issued as the column-scroll
+    // word arrives.
+    wire  [8:0] row_sel  = (gs == G_COLSC) ? (sy - vram_q[8:0]) : grp_row;
     wire  [5:0] tile_y   = row_sel[8:3];
     wire  [2:0] fine_y   = row_sel[2:0];
     wire  [5:0] tile_x   = sx[8:3];
@@ -115,152 +123,195 @@ module tilemap_line (
     wire [14:0] tx_addr  = TX_GFX + {4'd0, vram_q[7:0], tx_y};
 
     // Background tiles live in the graphics ROM, one 32-bit word per row.
-    wire  [2:0] bg_y     = attr[15] ? (3'd7 - fine_y) : fine_y;
+    wire  [2:0] bg_y     = f_attr[15] ? (3'd7 - fine_y) : fine_y;
 
-    // The pen at position k of the group.  For the backgrounds the 32-bit word
-    // is four packed bytes, two pixels each, left pixel in the high nibble;
-    // for the text layer it is one VRAM word in the top half, plane 0 then
-    // plane 1.
-    wire  [2:0] kk       = attr[14] ? (3'd7 - k) : k;
-    wire  [4:0] nib      = 5'd31 - {kk, 2'b00};
-    wire  [4:0] bit0     = 5'd31 - {2'b00, kk};
-    wire  [4:0] bit1     = 5'd23 - {2'b00, kk};
-    wire  [3:0] bg_pen   = data[nib -: 4];
-    wire  [3:0] tx_pen   = {2'd0, data[bit0], data[bit1]};
-    wire  [3:0] pen      = is_text ? tx_pen : bg_pen;
-    wire [11:0] index    = is_text ? {2'd0, attr[13:8], pen} : {attr[7:0], pen};
-
-    assign busy = state != S_IDLE;
+    wire  [8:0] grp_end  = fpx + 9'(8 - {6'd0, sx[2:0]});   // first x after this group
+    wire        hand_ok  = (gs == G_HAND) && !slot_full;
 
     always_ff @(posedge clk) begin
-        lb_we   <= 1'b0;
-
         if (reset) begin
-            state   <= S_IDLE;
+            gs      <= G_IDLE;
             gfx_req <= 1'b0;
         end else begin
-            if (state != S_IDLE) cycles <= cycles + 16'd1;
-
-            case (state)
-            // --------------------------------------------------------------
-            S_IDLE: if (start) begin
-                pass   <= 2'd0;
-                cycles <= '0;
-                state  <= S_PASS;
+            case (gs)
+            G_IDLE: if (start) begin
+                pass <= 2'd0;
+                gs   <= G_PASS;
             end
 
-            // --------------------------------------------------------------
-            S_PASS: begin
-                layer_bg1   <= want_bg1;
-                is_text     <= (pass == 2'd2);
-                pass_opaque <= (pass == 2'd0);
-                px          <= '0;
+            G_PASS: begin
+                layer_bg1 <= want_bg1;
+                is_text   <= (pass == 2'd2);
+                is_opaque <= (pass == 2'd0);
+                is_fill   <= 1'b0;
+                fpx       <= '0;
                 if (pass_off) begin
                     // MAME clears the bitmap before drawing anything, so a
                     // disabled bottom layer still leaves the line at index 0;
-                    // a disabled layer above it simply draws nothing.
-                    state <= (pass == 2'd0) ? S_FILL : S_DONE;
+                    // a disabled layer above it simply draws nothing.  The
+                    // clear is published as groups of an all-zero tile, which
+                    // needs no memory at all.
+                    if (pass == 2'd0) begin
+                        is_fill <= 1'b1;
+                        sx      <= '0;
+                        f_attr  <= '0;
+                        f_data  <= '0;
+                        gs      <= G_HAND;
+                    end else begin
+                        gs <= G_ENDPASS;
+                    end
                 end else if (pass == 2'd2) begin
                     sx      <= 9'd17 - ctrl2[8:0];
                     sy      <= row - 9'd8 - ctrl5[8:0];
                     grp_row <= row - 9'd8 - ctrl5[8:0];
-                    state   <= S_GROUP;
+                    gs      <= G_GROUP;
                 end else begin
-                    state <= S_ROWSC;
+                    gs <= G_ROWSC;
                 end
             end
 
-            // ----------------------------------------------- row scroll
-            S_ROWSC: state <= S_ROWSC_W;
+            G_ROWSC: gs <= G_ROWSC_W;
 
-            S_ROWSC_W: begin
+            G_ROWSC_W: begin
                 sx      <= 9'd17 - scroll_x[8:0] - vram_q[8:0];
                 sy      <= row - 9'd8 - scroll_y[8:0];
                 grp_row <= row - 9'd8 - scroll_y[8:0];
-                state   <= S_GROUP;
+                gs      <= G_GROUP;
             end
 
-            // ----------------------------------------------- one group
             // BG1 reads its column-scroll word first; everything else goes
             // straight to the attribute word.
-            S_GROUP: state <= (!is_text && layer_bg1) ? S_COLSC : S_ATTR;
+            G_GROUP: gs <= (!is_text && layer_bg1) ? G_COLSC : G_ATTR;
 
-            S_COLSC: begin
+            G_COLSC: begin
                 grp_row <= sy - vram_q[8:0];
-                state   <= S_ATTR;
+                gs      <= G_ATTR;
             end
 
-            S_ATTR: begin
-                attr  <= vram_q;
-                state <= S_CODE;
+            G_ATTR: begin
+                f_attr <= vram_q;
+                gs     <= G_CODE;
             end
 
-            S_CODE: begin
-                k <= sx[2:0];
+            G_CODE: begin
                 if (is_text) begin
-                    // the character row arrived with this state
-                    data  <= {vram_q, 16'd0};
-                    state <= S_BLIT;
+                    f_data <= {vram_q, 16'd0};  // the character row arrived here
+                    gs     <= G_HAND;
                 end else begin
                     gfx_req  <= 1'b1;
                     gfx_addr <= {vram_q[13:0], bg_y};
-                    state    <= S_FETCH;
+                    gs       <= G_FETCH;
                 end
             end
 
-            S_FETCH: if (gfx_ack) begin
-                gfx_req <= 1'b0;
-                data    <= gfx_q;
-                state   <= S_BLIT;
-            end
-
-            // ----------------------------------------------- write the pixels
-            S_BLIT: begin
-                if (pass_opaque || pen != 4'd0) begin
-                    lb_we   <= 1'b1;
-                    lb_x    <= px;
-                    lb_idx  <= index;
-                    lb_text <= is_text;
+            G_FETCH: begin
+                if (gfx_ack) begin
+                    gfx_req <= 1'b0;
+                    f_data  <= gfx_q;
+                    gs      <= G_HAND;
                 end
-                px <= px + 9'd1;
-                sx <= sx + 9'd1;
-                k  <= k + 3'd1;
-                if (px == 9'd319)     state <= S_DONE;
-                else if (k == 3'd7)   state <= S_GROUP;
             end
 
-            // ----------------------------------------------- blank line
-            S_FILL: begin
-                lb_we   <= 1'b1;
-                lb_x    <= px;
-                lb_idx  <= 12'd0;
-                lb_text <= 1'b0;
-                px      <= px + 9'd1;
-                if (px == 9'd319) state <= S_DONE;
+            // Hand the group over as soon as the blitter has taken the last
+            // one, and start on the next without waiting for it to be drawn.
+            G_HAND: if (!slot_full) begin
+                sx  <= sx + 9'(8 - {6'd0, sx[2:0]});
+                fpx <= grp_end;
+                if (grp_end >= 9'd320) gs <= G_ENDPASS;
+                else if (is_fill)      gs <= G_HAND;
+                else                   gs <= G_GROUP;
             end
 
-            // --------------------------------------------------------------
-            S_DONE: begin
+            G_ENDPASS: begin
                 if (pass == 2'd2) begin
-                    state <= S_IDLE;
+                    gs <= G_IDLE;
                 end else begin
-                    pass  <= pass + 2'd1;
-                    state <= S_PASS;
+                    pass <= pass + 2'd1;
+                    gs   <= G_PASS;
                 end
             end
 
-            default: state <= S_IDLE;
+            default: gs <= G_IDLE;
             endcase
         end
     end
 
+    // ------------------------------------------------------------ blitter
+    // The blitter takes its own copy of the group.  The slot is free again the
+    // moment it does, so the fetcher starts on the next group immediately and
+    // would otherwise overwrite the data still being drawn.
+    logic        running;
+    logic  [2:0] k;
+    logic  [8:0] bpx;
+    logic [15:0] b_attr;
+    logic [31:0] b_data;
+    logic        b_text, b_opaque;
+
+    wire  [2:0] kk    = b_attr[14] ? (3'd7 - k) : k;
+    wire  [4:0] nib   = 5'd31 - {kk, 2'b00};
+    wire  [4:0] bit0  = 5'd31 - {2'b00, kk};
+    wire  [4:0] bit1  = 5'd23 - {2'b00, kk};
+    wire  [3:0] pen   = b_text ? {2'd0, b_data[bit0], b_data[bit1]}
+                               : b_data[nib -: 4];
+    wire [11:0] index = b_text ? {2'd0, b_attr[13:8], pen} : {b_attr[7:0], pen};
+
+    always_ff @(posedge clk) begin
+        lb_we <= 1'b0;
+
+        if (reset) begin
+            running   <= 1'b0;
+            slot_full <= 1'b0;
+        end else begin
+            if (hand_ok) begin
+                p_attr    <= f_attr;
+                p_data    <= f_data;
+                p_k0      <= sx[2:0];
+                p_px      <= fpx;
+                p_text    <= is_text;
+                p_opaque  <= is_opaque;
+                slot_full <= 1'b1;
+            end
+
+            if (!running) begin
+                if (slot_full && !hand_ok) begin
+                    b_attr    <= p_attr;
+                    b_data    <= p_data;
+                    b_text    <= p_text;
+                    b_opaque  <= p_opaque;
+                    k         <= p_k0;
+                    bpx       <= p_px;
+                    running   <= 1'b1;
+                    slot_full <= 1'b0;
+                end
+            end else begin
+                if (b_opaque || pen != 4'd0) begin
+                    lb_we   <= 1'b1;
+                    lb_x    <= bpx;
+                    lb_idx  <= index;
+                    lb_text <= b_text;
+                end
+                k   <= k + 3'd1;
+                bpx <= bpx + 9'd1;
+                if (k == 3'd7 || bpx == 9'd319) running <= 1'b0;
+            end
+        end
+    end
+
+    assign busy = (gs != G_IDLE) || slot_full || running || lb_we;
+
+    always_ff @(posedge clk) begin
+        if (reset)      cycles <= '0;
+        else if (start) cycles <= '0;
+        else if (busy)  cycles <= cycles + 16'd1;
+    end
+
     // The VRAM address whose answer arrives next clock.
     always_comb begin
-        case (state)
-        S_ROWSC:  vram_addr = (layer_bg1 ? BG1_ROWSC : BG0_ROWSC) + {6'd0, row - 9'd8};
-        S_GROUP:  vram_addr = (!is_text && layer_bg1) ? (COLSC + {9'd0, sx[8:3]}) : map_addr;
-        S_COLSC:  vram_addr = map_addr;
-        S_ATTR:   vram_addr = is_text ? tx_addr : (map_addr | 15'd1);
+        case (gs)
+        G_ROWSC:  vram_addr = (layer_bg1 ? BG1_ROWSC : BG0_ROWSC) + {6'd0, row - 9'd8};
+        G_GROUP:  vram_addr = (!is_text && layer_bg1) ? (COLSC + {9'd0, sx[8:3]}) : map_addr;
+        G_COLSC:  vram_addr = map_addr;
+        G_ATTR:   vram_addr = is_text ? tx_addr : (map_addr | 15'd1);
         default:  vram_addr = map_addr;
         endcase
     end

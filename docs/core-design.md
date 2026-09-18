@@ -135,24 +135,32 @@ sprite in the table wins" rather than "the first visible one wins".
 
 A line is 436 dot clocks, and at 96 MHz that is **6104 system clocks**.
 
-| pass | clocks | worst case measured |
+| pass | what it costs | measured worst |
 |---|---|---|
-| bottom background | 41 groups x 8 | 328 |
-| top background | 41 groups x 8 | 328 |
-| text | 41 groups x 8 | 328 |
-| sprite table scan | 256 entries x 1, plus 3 more per hit | 460 |
-| sprite blending | 16 per sprite on the line | 1088 |
-| **total** | | **2532** |
+| three tilemap passes | 41 groups each, the larger of 8 pixels and one fetch | 1891 |
+| sprites | 2 clocks per entry missed, the larger of 16 pixels and one fetch per hit | 1656 |
+| **worst line seen** | | **3547 of 6104** |
 
-The sprite numbers come from `tools/probe_sprites.lua` over a 75-second run:
-the worst scanline anywhere in it has **68 sprites** on it (frame 859) and the
-worst frame puts **145 sprites** on the screen (frame 2597). Both frames are
-in the bench's state set.
+The sprite numbers come from `tools/probe_sprites.lua` over a 75-second
+attract-mode run: the worst scanline anywhere in it has **68 sprites** on it
+(frame 859) and the worst frame puts **145 sprites** on the screen (frame
+2597). Both frames are in the bench's state set, and the figures above are
+frame 859 at a modelled graphics-ROM latency of 12 clocks.
 
-Graphics fetches overlap the pass they feed: the tile row for group *i+2* is
-requested while group *i* is being written, and the row for sprite *i+1* while
-sprite *i* is being blended, so a fetch has 16 clocks to complete rather than
-the 8 or 16 it would have back to back.
+Fetching and drawing run side by side in both renderers, each with a
+one-entry slot between them, so a group or a sprite costs the larger of its
+pixels and its fetch rather than the sum. That is what buys the headroom:
+
+| graphics ROM latency | worst line |
+|---|---|
+| 6 clocks | 2932 |
+| 12 clocks | 3547 |
+| 20 clocks | 4739 |
+| 30 clocks | over budget |
+
+So the renderer tolerates about 25 clocks of latency per graphics read before
+a line stops fitting, which is the number the SDRAM controller has to beat
+under contention with both CPUs.
 
 ---
 
