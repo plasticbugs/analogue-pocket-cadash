@@ -15,14 +15,13 @@ cadash.rom in Assets/cadash/common/.
 
 The video was written against MAME and
 is pixel-identical to it on every state
-the frozen-state bench checks, the
-heaviest sprite frames included, and
-the whole machine reaches MAME's title
+the frozen-state bench checks, and the
+whole machine reaches MAME's title
 screen pixel for pixel from reset.
 
 Two-cabinet link play is not
-implemented; the Communication Mode
-switch is fixed at Stand alone.
+implemented; Communication Mode is
+fixed at Stand alone.
 
 Controls
 * A / Y   attack
@@ -30,6 +29,5 @@ Controls
 * Select  insert coin
 * Start   start
 
-The core menu carries both DIP banks,
-the screen shape, scanlines and a
-shadow mask.
+The menu carries both DIP banks, the
+screen shape, scanlines and a mask.
