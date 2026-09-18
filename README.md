@@ -21,18 +21,18 @@ image) targets the World set and shares the rest.
 
 | Board part | Implementation | Status |
 |---|---|---|
-| MC68000 @ 16 MHz (main CPU) | — | not started; planned: fx68k |
-| Z80 @ 4 MHz (sound CPU) | — | not started; planned: T80/TV80 |
-| YM2151 @ 4 MHz (FM) | — | not started; planned: JT51 |
+| MC68000 @ 16 MHz (main CPU) | `rtl/cadash_main.sv` + fx68k | runs the real program; boots in the whole-machine bench |
+| Z80 @ 4 MHz (sound CPU) | `rtl/cadash_sound.sv` + TV80 | runs; banked through the YM2151's CT1/CT2 pins as the board does |
+| YM2151 @ 4 MHz (FM) | `rtl/cadash_sound.sv` + JT51 | instantiated, not yet checked against MAME's audio |
 | TC0100SCN (tilemaps + text) | `rtl/tilemap_line.sv` | renders every frozen state exactly as the MAME-verified reference does |
 | PC090OJ (sprites) | `rtl/sprite_line.sv` | as above |
 | TC0110PCR (palette) | `rtl/cadash_video.sv` | as above |
-| TC0220IOC (inputs, DIPs, coin, watchdog) | — | not started |
-| PC060HA (68000↔Z80 comms) | — | not started |
+| TC0220IOC (inputs, DIPs, coin, watchdog) | `rtl/tc0220ioc.sv` | written from MAME's device |
+| PC060HA (68000↔Z80 comms) | `rtl/pc060ha.sv` | carried over unchanged from the Master of Weapon core: MAME implements both boards' comms unit as one device |
 | Video timing | `rtl/video_timing.sv` | 436×262 raster at 96/14 MHz, within 0.06% of the board's real rate |
 | ROM image (1.6 MB) | `cadash.mra` + `tools/mra_build.py` | built and verified byte-for-byte against MAME's own loaded regions |
 | HD64180 link CPU (two-cabinet link play) | — | not implemented, not planned — MAME itself cannot run it either |
-| Pocket platform integration (`target/`, `platform/`) | — | not started |
+| Pocket platform integration | `target/pocket/`, `platform/pocket/`, `pkg/pocket/` | Quartus 18.1 analysis and synthesis passes with no errors; never run on hardware |
 
 What is actually proven, and how:
 
@@ -62,10 +62,14 @@ What is actually proven, and how:
   modelled graphics-ROM latency of 20 clocks (`docs/core-design.md` §5). That
   is the figure the SDRAM controller will have to beat once both CPUs are
   competing for it.
-* **Nothing past the video block has been started.** No CPU, no sound, no
-  input handling, no Pocket platform glue (`target/pocket/`,
-  `platform/pocket/`, `input.json`, `video.json` do not exist in this
-  repository yet).
+* **The whole machine boots in simulation.** `sim/run_system.sh` runs both
+  CPUs on the real program against a model of the Pocket's SDRAM: the 68000
+  never halts and the picture fills. What has *not* been checked is whether
+  the frames it produces match MAME's frame for frame, and the sound has not
+  been compared with MAME at all.
+* **It has never run on hardware.** Quartus 18.1 builds it, but no bitstream
+  has been loaded on a Pocket, so nothing below simulation is proven: not the
+  SDRAM timing, not the video hand-off, not the controls.
 
 ## What's here
 

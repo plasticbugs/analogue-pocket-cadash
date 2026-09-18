@@ -19,6 +19,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <map>
+#include <algorithm>
 
 static const int W = 320, H = 240;
 static const size_t PROG_BASE = 0x000000, PROG_LEN = 0x80000;
@@ -103,6 +105,14 @@ int main(int argc, char **argv) {
     int   overrun_count = 0, last_overrun = -1;
     int   worst_line = 0, worst_frame = 0, first_overrun = -1;
     long  snd_nonzero = 0, snd_peak = 0;
+    std::map<uint32_t, long> pc_hist;
+    bool  as_prev = false;
+    // a shadow of main RAM, so a read that does not return what was written
+    // is caught the moment it happens
+    std::vector<uint16_t> shadow(16384, 0);
+    std::vector<bool>     known(16384, false);
+    long  ram_checked = 0, ram_bad = 0;
+    bool  done_prev = false;
     bool  vb_prev = false;
 
     const long limit = (long)frames * 262 * 436 * 14 + 4000000;
@@ -124,6 +134,40 @@ int main(int argc, char **argv) {
         int s = (int16_t)dut->sound;
         if (s) snd_nonzero++;
         if (abs(s) > snd_peak) snd_peak = abs(s);
+
+        // where the 68000 spends its time: one sample per bus cycle
+        bool as = dut->m68k_as;
+        if (as && !as_prev && frame >= frames - 4)
+            pc_hist[(uint32_t)dut->m68k_addr << 1]++;
+        as_prev = as;
+
+        // one sample per completed bus cycle
+        bool done_now = dut->m68k_done;
+        if (done_now && !done_prev) {
+            uint32_t a = (uint32_t)dut->m68k_addr << 1;
+            if (a >= 0x100000 && a < 0x108000) {
+                int w = (a - 0x100000) >> 1;
+                int ds = dut->m68k_ds;
+                if (dut->m68k_rw) {
+                    uint16_t v = dut->m68k_dout, old = shadow[w];
+                    if (ds & 2) old = (old & 0x00ff) | (v & 0xff00);
+                    if (ds & 1) old = (old & 0xff00) | (v & 0x00ff);
+                    shadow[w] = old;
+                    known[w] = (ds == 3) ? true : known[w];
+                } else if (known[w]) {
+                    uint16_t got = dut->m68k_din, want = shadow[w];
+                    uint16_t mask = ((ds & 2) ? 0xff00 : 0) | ((ds & 1) ? 0x00ff : 0);
+                    ram_checked++;
+                    if ((got ^ want) & mask) {
+                        if (ram_bad < 6)
+                            printf("main RAM %06X: wrote %04X, read %04X (ds %d)\n",
+                                   a, want, got, ds);
+                        ram_bad++;
+                    }
+                }
+            }
+        }
+        done_prev = done_now;
 
         bool vb = dut->vblank;
         if (vb && !vb_prev) frame++;
@@ -151,6 +195,18 @@ int main(int argc, char **argv) {
     for (int i = 0; i < W * H; i++) if (idx[i]) nonblank++;
 
     if (out_dir) {
+        // the tilemap RAM, so the text layer can be read back
+        std::string vp = std::string(out_dir) + "/vram.bin";
+        FILE *vf = fopen(vp.c_str(), "wb");
+        if (vf) {
+            for (int i = 0; i < 32768; i++) {
+                dut->probe_addr = i;
+                dut->eval();
+                uint16_t v = dut->probe_q;
+                fwrite(&v, 2, 1, vf);
+            }
+            fclose(vf);
+        }
         std::string p = std::string(out_dir) + "/frame.idx";
         FILE *of = fopen(p.c_str(), "wb");
         if (of) { fwrite(idx.data(), 2, idx.size(), of); fclose(of); }
@@ -159,6 +215,19 @@ int main(int argc, char **argv) {
     printf("frames %d, %ld clocks, halted for %ld\n", frame, clocks, halted_clocks);
     printf("picture: %d of %d indices non-zero\n", nonblank, W * H);
     printf("sound:   %ld non-zero samples, peak %ld\n", snd_nonzero, snd_peak);
+    printf("main RAM: %ld reads checked, %ld wrong\n", ram_checked, ram_bad);
+    printf("68000 vblank IRQs %u, PC060HA master accesses %u, slave %u\n",
+           dut->n_irq, dut->n_ciu_m, dut->n_ciu_s);
+    printf("Z80: %u NMIs, %u RAM writes, %u YM2151 writes\n",
+           dut->n_nmi, dut->n_z80_wr, dut->n_ym);
+    {
+        std::vector<std::pair<long, uint32_t>> top;
+        for (auto &kv : pc_hist) top.push_back({kv.second, kv.first});
+        std::sort(top.rbegin(), top.rend());
+        printf("68000 busiest addresses over the last four frames:\n");
+        for (size_t i = 0; i < top.size() && i < 12; i++)
+            printf("   %06X  %ld\n", top[i].second, top[i].first);
+    }
     printf("worst line %d of 6104 clocks, frame %d\n", worst_line, worst_frame);
     if (first_overrun >= 0)
         printf("lines dropped: %d, frames %d..%d\n",

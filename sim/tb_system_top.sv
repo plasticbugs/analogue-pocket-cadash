@@ -29,7 +29,22 @@ module tb_system_top (
     output logic        dbg_halted,
     output logic  [7:0] dbg_line_overrun,
     output logic [15:0] dbg_tile_cycles,
-    output logic [15:0] dbg_obj_cycles
+    output logic [15:0] dbg_obj_cycles,
+
+    // read-only window into the chip's RAM, so the bench can read the text
+    // the boot self-test puts on the screen
+    input  logic [14:0] probe_addr,
+    output logic [15:0] probe_q,
+
+    // activity counters, so a stuck machine can be told apart from a quiet one
+    output logic [31:0] n_ciu_m, n_ciu_s, n_nmi, n_ym, n_z80_wr, n_irq,
+
+    // the 68000's bus, so the bench can see where it is and what it moved
+    output logic [23:1] m68k_addr,
+    output logic        m68k_as, m68k_rw,
+    output logic [15:0] m68k_dout, m68k_din,
+    output logic  [1:0] m68k_ds,
+    output logic        m68k_done
 );
     logic [15:0] prog [0:262143];       // 512 KB as 16-bit words
     logic  [7:0] snd  [0:65535];
@@ -124,7 +139,38 @@ module tb_system_top (
         .dbg_tile_cycles, .dbg_obj_cycles, .dbg_line_overrun, .dbg_halted
     );
 
-    assign vcnt = u_core.vcnt;
+    assign vcnt    = u_core.vcnt;
+
+    assign m68k_addr = u_core.u_main.cpu_addr;
+    assign m68k_as   = ~u_core.u_main.as_n;
+    assign m68k_rw   = ~u_core.u_main.rw_n;
+    assign m68k_dout = u_core.u_main.cpu_dout;
+    assign m68k_din  = u_core.u_main.din_r;
+    assign m68k_ds   = u_core.u_main.ds;
+    assign m68k_done = u_core.u_main.done;
+
+    logic nmi_d, irq_d;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            n_ciu_m <= '0; n_ciu_s <= '0; n_nmi <= '0;
+            n_ym <= '0; n_z80_wr <= '0; n_irq <= '0;
+        end else begin
+            if (u_core.m_port_wr || u_core.m_comm_wr || u_core.m_comm_rd)
+                n_ciu_m <= n_ciu_m + 32'd1;
+            if (u_core.s_port_wr || u_core.s_comm_wr || u_core.s_comm_rd)
+                n_ciu_s <= n_ciu_s + 32'd1;
+            nmi_d <= u_core.ciu_nmi;
+            if (u_core.ciu_nmi && !nmi_d) n_nmi <= n_nmi + 32'd1;
+            if (u_core.u_sound.sel_ym && u_core.u_sound.mem_wr
+                && u_core.u_sound.acc_first) n_ym <= n_ym + 32'd1;
+            if (u_core.u_sound.sel_ram && u_core.u_sound.mem_wr
+                && u_core.u_sound.acc_first) n_z80_wr <= n_z80_wr + 32'd1;
+            irq_d <= u_core.u_main.irq4;
+            if (u_core.u_main.irq4 && !irq_d) n_irq <= n_irq + 32'd1;
+        end
+    end
+    assign probe_q = {u_core.u_video.vram[probe_addr][1],
+                      u_core.u_video.vram[probe_addr][0]};
 
     wire _unused = &{1'b0, r, g, b, hs, vs, hb, coin, 1'b0};
 endmodule

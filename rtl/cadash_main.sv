@@ -121,7 +121,7 @@ module cadash_main (
     wire sel_rom    = bus & (cpu_addr[23:19] == 5'h00);              // 000000-07FFFF
     wire sel_sprctl = bus & (cpu_addr[23:2]  == 22'h020000);         // 080000-080003
     wire sel_ciu    = bus & (cpu_addr[23:2]  == 22'h030000);         // 0C0000-0C0003
-    wire sel_ram    = bus & (cpu_addr[23:15] == 9'b0_0001_0000);     // 100000-107FFF
+    wire sel_ram    = bus & (cpu_addr[23:15] == 9'd32);               // 100000-107FFF
     wire sel_link   = bus & (cpu_addr[23:12] == 12'h800);            // 800000-800FFF
     wire sel_ioc    = bus & (cpu_addr[23:4]  == 20'h90000);          // 900000-90000F
     wire sel_pal    = bus & (cpu_addr[23:4]  == 20'hA0000);          // A00000-A0000F
