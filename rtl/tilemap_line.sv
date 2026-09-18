@@ -35,6 +35,7 @@ module tilemap_line (
     input  logic        reset,
 
     input  logic        start,          // render `row` into the line buffer
+    input  logic        drop,          // give up: the line ran out of time
     input  logic  [8:0] row,            // MAME bitmap row, 16..255
     output logic        busy,
 
@@ -129,7 +130,7 @@ module tilemap_line (
     wire        hand_ok  = (gs == G_HAND) && !slot_full;
 
     always_ff @(posedge clk) begin
-        if (reset) begin
+        if (reset || drop) begin
             gs      <= G_IDLE;
             gfx_req <= 1'b0;
         end else begin
@@ -258,7 +259,7 @@ module tilemap_line (
     always_ff @(posedge clk) begin
         lb_we <= 1'b0;
 
-        if (reset) begin
+        if (reset || drop) begin
             running   <= 1'b0;
             slot_full <= 1'b0;
         end else begin

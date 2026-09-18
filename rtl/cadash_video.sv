@@ -17,6 +17,7 @@
 module cadash_video (
     input  logic        clk,
     input  logic        reset,
+    input  logic        pix_sync,       // pins the dot divider to the video clock
 
     // ---------------- CPU side ----------------
     // A region is selected for one clock; a read answers on the next.
@@ -53,7 +54,7 @@ module cadash_video (
     // ---------------- diagnostics ----------------
     output logic [15:0] tile_cycles,    // clocks the last line's tilemaps took
     output logic [15:0] obj_cycles,     // and its sprites
-    output logic        line_overrun    // a line did not finish in time
+    output logic  [7:0] line_overrun    // lines that did not finish in time
 );
     // ------------------------------------------------------------- timing
     logic [8:0] hcnt;
@@ -61,7 +62,7 @@ module cadash_video (
     logic       hs_t, vs_t, hb_t, vb_t, de_t;
 
     video_timing u_timing (
-        .clk, .reset, .ce_pix, .hcnt, .vcnt,
+        .clk, .reset, .pix_sync, .ce_pix, .hcnt, .vcnt,
         .hsync(hs_t), .vsync(vs_t), .hblank(hb_t), .vblank(vb_t), .de(de_t),
         .line_start, .frame_start
     );
@@ -215,8 +216,15 @@ module cadash_video (
     logic [8:0] tm_x;
     logic [11:0] tm_idx;
 
+    // A line that does not finish in time is abandoned rather than allowed to
+    // run into the next one: the picture loses whatever was left of it, which
+    // is what running out of time looks like on hardware, and the renderer is
+    // ready for the next line either way.  Without this a single overrun loses
+    // the start pulse and the renderer never draws again.
+    wire line_abort = line_start && rendering;
+
     tilemap_line u_tm (
-        .clk, .reset,
+        .clk, .reset, .drop(line_abort),
         .start(tm_start), .row(render_row), .busy(tm_busy),
         .ctrl0(ctrl[0]), .ctrl1(ctrl[1]), .ctrl2(ctrl[2]), .ctrl3(ctrl[3]),
         .ctrl4(ctrl[4]), .ctrl5(ctrl[5]), .ctrl6(ctrl[6]),
@@ -232,7 +240,7 @@ module cadash_video (
     logic [13:0] ob_d;
 
     sprite_line u_ob (
-        .clk, .reset,
+        .clk, .reset, .drop(line_abort),
         .start(ob_start), .row(render_row), .busy(ob_busy),
         .spr_ctrl(spr_ctrl), .oj_ctrl(oj_ctrl),
         .tab_addr(tab_addr), .tab_q(tab_q),
@@ -263,11 +271,13 @@ module cadash_video (
             rendering    <= 1'b0;
             ren_buf      <= 1'b0;
             copy_run     <= 1'b0;
-            line_overrun <= 1'b0;
+            line_overrun <= '0;
         end else begin
             // one line of lead: render N+1 while N is displayed
             if (line_start) begin
-                if (rendering) line_overrun <= 1'b1;
+                if (rendering && line_overrun != 8'hff)
+                    line_overrun <= line_overrun + 8'd1;
+                rendering <= 1'b0;
                 // The buffers alternate every line whether or not there is
                 // anything to draw into them, so the display always reads the
                 // one the renderer is not holding.

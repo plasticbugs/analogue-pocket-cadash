@@ -1,0 +1,40 @@
+#!/bin/sh
+# Whole-machine bench: both CPUs run the real program against models of the
+# Pocket's memories.  Slow -- a frame is 1.6 million clocks -- so use it for
+# questions about the machine (does it boot, do the interrupts run, does the
+# sound CPU answer) and sim/run_video.sh for anything about the picture.
+#
+#   sim/run_system.sh [rom] [extra bench args]
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/.." && pwd)
+rom=${1:-$root/tmp/cadash.rom}
+case "$rom" in /*) ;; *) rom="$(pwd)/$rom" ;; esac
+[ -f "$rom" ] || python3 "$root/tools/mra_build.py" "$root/cadash.mra" "$root/cadash" "$rom" >/dev/null
+[ $# -gt 0 ] && shift
+cd "$here"
+
+# --no-assert-case: fx68k's ALU has a `unique case` that does not match while
+# the CPU is still in reset, which Verilator would otherwise stop on.
+verilator --cc --exe --build -j "${JOBS:-8}" -O2 \
+    -Wall -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM \
+    -Wno-PINCONNECTEMPTY -Wno-TIMESCALEMOD -Wno-EOFNEWLINE -Wno-VARHIDDEN \
+    -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-ALWCOMBORDER -Wno-BLKANDNBLK \
+    -Wno-UNOPTFLAT -Wno-CASEINCOMPLETE -Wno-SYNCASYNCNET -Wno-MULTIDRIVEN \
+    -Wno-UNSIGNED -Wno-CMPCONST -Wno-IMPLICIT -Wno-LATCH -Wno-COMBDLY \
+    -Wno-INITIALDLY -Wno-BLKSEQ -Wno-PINMISSING -Wno-UNDRIVEN --no-assert-case \
+    --top-module tb_system_top -Mdir obj_system \
+    ../rtl/*.sv \
+    ../modules/cpu-fx68k/fx68k.sv ../modules/cpu-fx68k/fx68kAlu.sv \
+    ../modules/cpu-fx68k/uaddrPla.sv ../modules/cpu-tv80/*.v \
+    ../modules/sound-jt51/*.v \
+    tb_system_top.sv tb_system.cpp > obj_system.log 2>&1 \
+    || { tail -40 obj_system.log; exit 1; }
+
+# fx68k reads its microcode with $readmemb from the working directory
+ln -sf ../../modules/cpu-fx68k/microrom.mem obj_system/microrom.mem
+ln -sf ../../modules/cpu-fx68k/nanorom.mem  obj_system/nanorom.mem
+
+mkdir -p "$root/artifacts/system"
+cd obj_system
+exec ./Vtb_system_top "$rom" -o "$root/artifacts/system" "$@"

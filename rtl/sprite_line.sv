@@ -35,6 +35,7 @@ module sprite_line (
     input  logic        reset,
 
     input  logic        start,
+    input  logic        drop,          // give up: the line ran out of time
     input  logic  [8:0] row,            // MAME bitmap row, 16..255
     output logic        busy,
 
@@ -93,7 +94,7 @@ module sprite_line (
     wire               flipy   = flip_all ^ p_attr[15];
 
     always_ff @(posedge clk) begin
-        if (reset) begin
+        if (reset || drop) begin
             fs       <= F_IDLE;
             gfx_req  <= 1'b0;
             last_ent <= 1'b1;
@@ -193,7 +194,7 @@ module sprite_line (
         lb_we   <= 1'b0;
         w_valid <= 1'b0;
 
-        if (reset) begin
+        if (reset || drop) begin
             running   <= 1'b0;
             slot_full <= 1'b0;
         end else begin

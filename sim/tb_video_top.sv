@@ -41,7 +41,7 @@ module tb_video_top (
     output logic        vblank,
     output logic [15:0] tile_cycles,
     output logic [15:0] obj_cycles,
-    output logic        line_overrun
+    output logic  [7:0] line_overrun
 );
     // ------------------------------------------------- graphics ROM model
     logic [31:0] tile_rom [0:131071];   // 512 KB as 8-pixel rows
@@ -94,7 +94,7 @@ module tb_video_top (
     logic       hs, vs, hb;
 
     cadash_video u_video (
-        .clk, .reset,
+        .clk, .reset, .pix_sync(1'b0),
         .vram_cs, .ctrl_cs, .spr_cs, .pal_cs, .sprctl_cs,
         .cpu_addr, .cpu_din, .cpu_ds(2'b11), .cpu_we, .cpu_dout(),
         .tile_req, .tile_addr, .tile_ack, .tile_q,

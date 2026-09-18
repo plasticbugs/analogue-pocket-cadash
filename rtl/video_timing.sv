@@ -17,6 +17,11 @@
 module video_timing (
     input  logic       clk,
     input  logic       reset,
+    // One pulse just after each edge of the platform's video clock, which
+    // restarts the dot divider.  Without it the dot enable would sit at
+    // whatever phase the reset left it in, and the pixel handed to the video
+    // clock could be sampled while it changes (METHODOLOGY section 5.4).
+    input  logic       pix_sync,
 
     output logic       ce_pix,      // one system clock in fourteen
     output logic [8:0] hcnt,        // 0..435
@@ -48,7 +53,7 @@ module video_timing (
             hcnt <= '0;
             vcnt <= '0;
         end else begin
-            div <= (div == 4'd13) ? 4'd0 : div + 4'd1;
+            div <= (pix_sync || div == 4'd13) ? 4'd0 : div + 4'd1;
             if (ce_pix) begin
                 if (hcnt == 9'(H_TOTAL - 1)) begin
                     hcnt <= '0;
