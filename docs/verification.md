@@ -90,6 +90,49 @@ either video gate could have seen it.
 
 ---
 
+## 4a. The sound chip on its own — seconds
+
+    sim/run_ym.sh
+
+A YM2151 with nothing around it, driven with the core's own clock enables and
+the core's own held write.  It sets CT1 and CT2 -- which on this board are the
+Z80's ROM bank -- and plays one note.
+
+This exists because the whole-machine bench could not answer the question it
+was being asked. It could say the Z80 wrote the chip fifty thousand times and
+nothing came out; it could not say whether the fault was the sound driver or
+the way the core presents a write. Ten seconds of this said the chip was fine,
+which turned the search around.
+
+---
+
+## 4b. The sound CPU against MAME's — seconds
+
+    tools/probe_sound.lua
+
+Counts, on the MAME side, what the sound Z80 asks the YM2151 for: total
+writes, key-ons and when the first one happens, how often it selects register
+0x1B (the bank), and what the 68000 sends the comms unit. `sim/run_system.sh`
+counts the same things on the core side, so the two can be put side by side.
+
+That comparison is what found the PC060HA read bug. Over 200 frames with a
+coin at frame 120:
+
+| | MAME | the core, before |
+|---|---|---|
+| YM2151 writes | 47,310 | 49,100 |
+| key-ons | 22, first at frame 139 | **0** |
+| 68000 -> comms unit | 51 writes | comparable |
+
+A driver running at the right rate and playing nothing is a driver being fed
+the wrong data, which is what it was: reading the comms unit advances its
+mode, and the Z80 samples its data bus at the *end* of a bus cycle, by which
+time the strobe at the start had already moved the mode on. The 68000 side
+had been written to capture the byte on the first clock; the Z80 side had
+not.
+
+---
+
 ## 5. What none of this covers
 
 * **Sound has not been compared with MAME at all.** The YM2151 is
