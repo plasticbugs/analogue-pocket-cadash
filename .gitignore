@@ -1,0 +1,36 @@
+# ROMs — never commit
+cadash/
+*.zip
+*.bin
+*.rom
+romset/
+
+# Build artefacts
+projects/db/
+projects/incremental_db/
+projects/output_files/
+projects/greybox_tmp/
+projects/*.qws
+projects/*.rpt
+projects/*.summary
+projects/*.done
+projects/*.jdi
+projects/*.pin
+projects/*.sof
+projects/*.rbf*
+build/
+artifacts/
+pkg/
+release/
+
+# Simulation
+sim/obj_*/
+sim/*.log
+sim/*.vcd
+
+# Scratch
+tmp/
+snap/
+__pycache__/
+*.pyc
+.DS_Store
