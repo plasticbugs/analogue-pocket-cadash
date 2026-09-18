@@ -24,7 +24,7 @@ image) targets the World set and shares the rest.
 | MC68000 @ 16 MHz (main CPU) | — | not started; planned: fx68k |
 | Z80 @ 4 MHz (sound CPU) | — | not started; planned: T80/TV80 |
 | YM2151 @ 4 MHz (FM) | — | not started; planned: JT51 |
-| TC0100SCN (tilemaps + text) | `rtl/tilemap_line.sv` | reference renderer pixel-identical to MAME; RTL bench in progress, not yet matching |
+| TC0100SCN (tilemaps + text) | `rtl/tilemap_line.sv` | renders every frozen state exactly as the MAME-verified reference does |
 | PC090OJ (sprites) | `rtl/sprite_line.sv` | as above |
 | TC0110PCR (palette) | `rtl/cadash_video.sv` | as above |
 | TC0220IOC (inputs, DIPs, coin, watchdog) | — | not started |
@@ -49,16 +49,19 @@ What is actually proven, and how:
 * **The ROM image is exactly what MAME loads.** `tools/verify_rom.py`
   compares the image `tools/mra_build.py` builds against the bytes MAME
   itself hands to each chip (dumped by `tools/dump_regions.lua`): identical.
-* **The video RTL exists and runs in the same bench, but does not yet match
-  it.** `sim/run_video.sh` builds `rtl/` under Verilator, loads each of the
-  ten frozen states through the video chips' own CPU-side ports, and diffs
-  the rendered output against the reference renderer. As of this writing it
-  fails on every state — this is the current, active work. One encouraging
-  data point: the timing side looks achievable independent of correctness —
-  measured worst-case lines land well inside the 6,104-clock line budget
-  (e.g. 4,434 clocks on the heaviest sprite frames; see
-  `docs/core-design.md` §5) — so what remains is fixing the renderer's
-  logic, not finding more throughput.
+* **The video RTL matches the reference renderer exactly.**
+  `sim/run_video.sh` builds `rtl/` under Verilator, loads each of the ten
+  frozen states through the video chips' own CPU-side ports, renders a frame
+  and diffs the palette indices against the reference renderer: **0 of 76,800
+  indices differ** on every state. Because the reference renderer is itself
+  pixel-identical to MAME, that makes the video RTL pixel-identical to MAME
+  on those states, including frame 859 with 67 sprites on one scanline and
+  frame 2597 with 145 sprites on the screen.
+* **The line budget has room.** The worst line in the state set costs 3,547
+  of the 6,104 system clocks a scanline has, and the renderer still fits at a
+  modelled graphics-ROM latency of 20 clocks (`docs/core-design.md` §5). That
+  is the figure the SDRAM controller will have to beat once both CPUs are
+  competing for it.
 * **Nothing past the video block has been started.** No CPU, no sound, no
   input handling, no Pocket platform glue (`target/pocket/`,
   `platform/pocket/`, `input.json`, `video.json` do not exist in this
