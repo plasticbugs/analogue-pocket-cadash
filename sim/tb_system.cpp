@@ -239,8 +239,11 @@ int main(int argc, char **argv) {
     printf("main RAM: %ld reads checked, %ld wrong\n", ram_checked, ram_bad);
     printf("68000 vblank IRQs %u, PC060HA master accesses %u, slave %u\n",
            dut->n_irq, dut->n_ciu_m, dut->n_ciu_s);
-    printf("Z80: %u NMIs, %u RAM writes, %u YM2151 writes\n",
-           dut->n_nmi, dut->n_z80_wr, dut->n_ym);
+    printf("Z80: %u NMIs, %u RAM writes, %u YM2151 writes, %u key-ons\n",
+           dut->n_nmi, dut->n_z80_wr, dut->n_ym, dut->n_keyon);
+    printf("YM2151 enables: %u at 4 MHz, %u at 2 MHz; last output %d / %d\n",
+           dut->n_cen_ym, dut->n_cen_p1, (int16_t)dut->ym_last_l,
+           (int16_t)dut->ym_last_r);
     {
         std::vector<std::pair<long, uint32_t>> top;
         for (auto &kv : pc_hist) top.push_back({kv.second, kv.first});

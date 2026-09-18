@@ -40,3 +40,6 @@ ref/taitof2/
 .mame/
 artifacts/
 *.log
+
+# the Pocket package's artwork is committed, unlike other .bin files
+!pkg/**/*.bin

@@ -1,0 +1,62 @@
+{
+    "input": {
+        "magic": "APF_VER_1",
+        "controllers": [
+            {
+                "type": "default",
+                "mappings": [
+                    {
+                        "id": 300,
+                        "name": "Jump",
+                        "key": "pad_btn_b"
+                    },
+                    {
+                        "id": 301,
+                        "name": "Attack",
+                        "key": "pad_btn_a"
+                    },
+                    {
+                        "id": 302,
+                        "name": "Jump (alt)",
+                        "key": "pad_btn_x"
+                    },
+                    {
+                        "id": 303,
+                        "name": "Attack (alt)",
+                        "key": "pad_btn_y"
+                    },
+                    {
+                        "id": 304,
+                        "name": "Coin",
+                        "key": "pad_btn_select"
+                    },
+                    {
+                        "id": 305,
+                        "name": "Start",
+                        "key": "pad_btn_start"
+                    },
+                    {
+                        "id": 306,
+                        "name": "Up",
+                        "key": "pad_dpad_up"
+                    },
+                    {
+                        "id": 307,
+                        "name": "Down",
+                        "key": "pad_dpad_down"
+                    },
+                    {
+                        "id": 308,
+                        "name": "Left",
+                        "key": "pad_dpad_left"
+                    },
+                    {
+                        "id": 309,
+                        "name": "Right",
+                        "key": "pad_dpad_right"
+                    }
+                ]
+            }
+        ]
+    }
+}
