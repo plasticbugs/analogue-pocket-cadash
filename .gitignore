@@ -34,3 +34,7 @@ snap/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Cloned reference cores (large; fetch with tools/fetch_refs.sh)
+ref/taitof2/
+.mame/
