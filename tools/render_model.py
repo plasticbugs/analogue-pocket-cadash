@@ -9,7 +9,12 @@ ref/mame/, because the point of the exercise is to own a readable statement of
 the semantics rather than re-derive them from C++ while writing Verilog.
 
 Usage:
-    render_model.py <state.bin> <image.rom> [--png out.png] [--quiet]
+    render_model.py <state.bin> <image.rom> [--png out.png] [--idx out.bin]
+                    [--quiet]
+
+--idx writes the 320x240 palette indices as little-endian u16, which is what
+the RTL bench in sim/ diffs against: comparing indices rather than colours
+keeps the video test independent of the palette conversion.
 """
 import sys, struct
 from array import array
@@ -335,7 +340,8 @@ def mame_rgb(st):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    skip = {i + 1 for i, a in enumerate(sys.argv) if a in ('--png', '--idx')}
+    args = [a for i, a in enumerate(sys.argv) if i > 0 and not a.startswith('--') and i not in skip]
     flags = {a for a in sys.argv[1:] if a.startswith('--')}
     if len(args) < 2:
         sys.exit(__doc__)
@@ -347,10 +353,12 @@ def main():
 
     bad = [i for i in range(SCREEN_W * SCREEN_H)
            if ours[i * 3:i * 3 + 3] != theirs[i * 3:i * 3 + 3]]
-    if '--png' in ' '.join(sys.argv):
-        i = sys.argv.index('--png')
+    if '--png' in sys.argv:
         import pngio
-        pngio.write(sys.argv[i + 1], SCREEN_W, SCREEN_H, ours)
+        pngio.write(sys.argv[sys.argv.index('--png') + 1], SCREEN_W, SCREEN_H, ours)
+    if '--idx' in sys.argv:
+        with open(sys.argv[sys.argv.index('--idx') + 1], 'wb') as f:
+            f.write(idx.tobytes())
     if '--quiet' not in flags:
         print(f'frame {st.frame}: {len(bad)} of {SCREEN_W * SCREEN_H} pixels differ')
         for i in bad[:8]:
