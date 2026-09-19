@@ -139,7 +139,7 @@ A line is 436 dot clocks, and at 96 MHz that is **6104 system clocks**.
 |---|---|---|
 | three tilemap passes | 41 groups each, the larger of 8 pixels and one fetch | 1891 |
 | sprites | 2 clocks per entry missed, the larger of 16 pixels and one fetch per hit | 1656 |
-| **worst line seen** | | **3547 of 6104** |
+| **worst line seen** | | **3589 of 6104** |
 
 The sprite numbers come from `tools/probe_sprites.lua` over a 75-second
 attract-mode run: the worst scanline anywhere in it has **68 sprites** on it
@@ -154,7 +154,7 @@ pixels and its fetch rather than the sum. That is what buys the headroom:
 | graphics ROM latency | worst line |
 |---|---|
 | 6 clocks | 2932 |
-| 12 clocks | 3547 |
+| 12 clocks | 3589 |
 | 20 clocks | 4739 |
 | 30 clocks | over budget |
 
@@ -174,42 +174,73 @@ under contention with both CPUs.
   implemented but unverified: the game never asks for either, even with the
   Flip Screen DIP on.
 
+
 ---
 
-## 7. Timing: the one path that does not close
+## 7. Timing
 
-Quartus 18.1 fits the core comfortably -- 8,715 of 18,480 ALMs, 246 of 308
-RAM blocks -- but **two paths miss setup by 90 ps** on the 96 MHz clock
-(TNS -0.127; the cold corner is -0.230). Everything else has margin: the
-Pocket's own clocks all sit above 2.9 ns.
+The core closes at 96 MHz with **+0.459 ns** of setup slack at the Slow 85 °C
+corner and +0.404 at the cold one; the worst number anywhere in the report,
+across every corner and every check, is +0.101 ns.  It fits in 8,542 of 18,480
+ALMs and 246 of 308 RAM blocks.
 
-Both failing paths are inside the tilemap RAM, from one M10K's write-enable
-register to another's address register. The cause is structural: that RAM
-needs three ports -- a read for the CPU, a read for the renderer and a write
--- and an M10K has two, so Quartus builds all 64 KB twice and sends every
-write to both copies. That write fan-out is the widest in the design, and the
-clock skew across the array is -1.34 ns of the 10.416 ns period.
+Getting there took two wrong answers first, which are worth recording because
+both were plausible and both were measured rather than argued away.
 
-Two things were tried:
+**The path was not where it looked.**  The tilemap RAM needs three ports -- a
+read for the CPU, a read for the renderer and a write -- and an M10K has two,
+so Quartus builds all 64 KB twice and sends every write to both copies.  That
+duplicated write is the obvious suspect, and it is wrong: the net is not even
+in the fitter's high fan-out table.  `report_timing -detail full_path` names
+the real one:
 
-* **Registering the write signals** so the fitter has a fabric register to
-  duplicate near each half. This made it *worse*, -0.466 ns: the extra
-  register did not reduce the fan-out, it only moved it. Reverted.
-* **Making the RAM single-copy**, with the CPU borrowing the renderer's read
-  port for the clock its read needs and the renderer stalling for that clock.
-  This is the right shape -- it halves the block RAM and removes the second
-  copy's write entirely -- and it renders every frozen state exactly right
-  with no CPU reads in flight. Under a deliberately brutal stress test (a CPU
-  read every 97 clocks, seventy per scanline, far beyond anything the 68000
-  does) 219 of 76,800 pixels come out one pixel shifted, so something about
-  the stall is still not right. Not shipped.
+```
+ram_block1a1|portbdataout[0]   VRAM read data out          1.181 ns
+  -> vram_rtl_0|mux5           the output mux over 64 M10Ks 0.562
+  -> u_tm|Add0~1 .. Add0~13    a subtract                   1.370
+  -> u_tm|Selector104~4                                     0.600
+  -> ram_block1a39|portbaddr[8] back into the VRAM address  2.095
+```
 
-The stall has to thread a needle: the renderer presents an address in one
-state and consumes the answer in the next, and two of its addresses are
-computed *from* the word it is currently reading -- BG1's column-scroll value
-and the text layer's character number. The version that renders correctly
-freezes the renderer for exactly the clock the CPU takes the port, holds the
-word the port was answering, and hands it over on the following clock while
-the renderer re-presents the address it could not issue. That is in the
-history; what it still gets wrong is worth finding, because it closes timing
-and frees fifty block RAMs.
+9.303 ns of data delay in a 10.416 ns period: the renderer was reading a word
+out of VRAM, subtracting it, and using the result as the next VRAM address
+inside one clock.  Two places did it -- `G_COLSC` forming BG1's attribute
+address from the column-scroll word as it arrived, and `G_ATTR` forming the
+text character address from the attribute word -- and both were deliberate,
+saving a clock per group.  `G_COLSC_W` and `G_ATTR_W` let each value land in a
+register first.  The cost is one clock per group, which took the worst line
+from 3547 to 3589 of 6104.
+
+**Two things that sounded right and measured worse.**  Registering the RAM's
+write signals, to give the fitter a fabric register to duplicate near each
+half, went from -0.090 to -0.466: it moved the fan-out rather than reducing
+it.  Switching the fitter from area-first to speed-first, with register
+duplication on, went to -0.394 and added 1,117 registers -- the register that
+needed duplicating lives inside an M10K, where the fitter cannot reach it.
+
+**And one that worked, and was still dropped.**  Marking the array
+`(* ramstyle = "no_rw_check" *)` collapses the two copies into one true
+dual-port array, because the guarantee Quartus is otherwise forced to keep --
+that a renderer read returns the *old* word when the CPU writes that address on
+that clock -- is not one an M10K can make in true dual-port mode.  It works,
+and it is a large win on paper: 246 RAM blocks to 182, 524,288 fewer memory
+bits.  It is not in the tree, for two reasons.  It moved the fitter's placement
+enough to cost 1.23 ns of clock skew on the SDRAM read capture path, which put
+that path 0.3 ns under water; and block RAM was never the scarce resource here
+while timing margin is.  Dropping it also means nothing ships that rests on an
+argument Verilator cannot check, since Verilator models old-data reads
+unconditionally and would pass either way.
+
+The SDRAM capture path is worth a note of its own, because it is the one that
+is closest to the edge and the least under the core's control.  It is
+constrained honestly -- `set_input_delay -max 7.0` with a `-setup 2` multicycle
+gives a 14.322 ns relationship -- the capture registers are packed into the I/O
+cells, and the 2.844 ns of data delay is identical to Gaiapolis's on the same
+pins.  All that separates a passing build from a failing one is how the fitter
+places the clock control blocks: Gaiapolis gets -3.379 ns of skew on that path
+and a build of this core with the RAM attribute got -4.610.  There is a
+principled lever if it ever bites -- reducing the PLL's 225 degree phase shift
+widens the read relationship, and the write side is constrained by
+`set_output_delay` so the analyser would check the trade rather than the
+author having to guess it -- but it changes a hardware-facing number inherited
+from a core proven on the panel, and it has not been needed.

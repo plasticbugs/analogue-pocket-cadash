@@ -76,7 +76,8 @@ module tilemap_line (
     // ------------------------------------------------------------ fetcher
     typedef enum logic [3:0] {
         G_IDLE, G_PASS, G_ROWSC, G_ROWSC_W,
-        G_GROUP, G_COLSC, G_ATTR, G_CODE, G_FETCH, G_HAND, G_ENDPASS
+        G_GROUP, G_COLSC, G_COLSC_W, G_ATTR, G_ATTR_W, G_CODE, G_FETCH,
+        G_HAND, G_ENDPASS
     } gstate_t;
 
     gstate_t     gs;
@@ -105,10 +106,16 @@ module tilemap_line (
     wire        bg_off   = want_bg1 ? bg1_off : bg0_off;
     wire        pass_off = (pass == 2'd2) ? tx_off : bg_off;
 
-    // The group's source row: registered from G_COLSC onwards, but needed one
-    // clock earlier so BG1's attribute read can be issued as the column-scroll
-    // word arrives.
-    wire  [8:0] row_sel  = (gs == G_COLSC) ? (sy - vram_q[8:0]) : grp_row;
+    // The group's source row, always out of a register.
+    //
+    // This used to read (gs == G_COLSC) ? (sy - vram_q[8:0]) : grp_row, so
+    // that BG1's attribute address was formed from the column-scroll word in
+    // the same clock it arrived and the group cost one clock less.  That put a
+    // VRAM read, the output mux across 64 M10Ks, this subtract and a VRAM
+    // address register all in one clock: 9.303 ns of a 10.416 ns period, and
+    // the longest path in the core by some way.  G_COLSC_W buys the clock back
+    // and the line budget has thousands to spare.
+    wire  [8:0] row_sel  = grp_row;
     wire  [5:0] tile_y   = row_sel[8:3];
     wire  [2:0] fine_y   = row_sel[2:0];
     wire  [5:0] tile_x   = sx[8:3];
@@ -119,9 +126,11 @@ module tilemap_line (
         : ((layer_bg1 ? BG1_MAP : BG0_MAP) + {2'd0, tile_y, tile_x, 1'b0});
 
     // The text layer's characters live in VRAM, two bitplanes in one word per
-    // row; the attribute word is on the bus as this address is formed.
-    wire  [2:0] tx_y     = vram_q[15] ? (3'd7 - fine_y) : fine_y;
-    wire [14:0] tx_addr  = TX_GFX + {4'd0, vram_q[7:0], tx_y};
+    // row.  The character number and its flip bit come from f_attr, which
+    // G_ATTR has registered by the time G_ATTR_W presents this address -- the
+    // same read-to-address loop as row_sel above, for the same reason.
+    wire  [2:0] tx_y     = f_attr[15] ? (3'd7 - fine_y) : fine_y;
+    wire [14:0] tx_addr  = TX_GFX + {4'd0, f_attr[7:0], tx_y};
 
     // Background tiles live in the graphics ROM, one 32-bit word per row.
     wire  [2:0] bg_y     = f_attr[15] ? (3'd7 - fine_y) : fine_y;
@@ -186,13 +195,19 @@ module tilemap_line (
 
             G_COLSC: begin
                 grp_row <= sy - vram_q[8:0];
-                gs      <= G_ATTR;
+                gs      <= G_COLSC_W;
             end
+
+            // grp_row is in its register now, so map_addr is safe to present.
+            G_COLSC_W: gs <= G_ATTR;
 
             G_ATTR: begin
                 f_attr <= vram_q;
-                gs     <= G_CODE;
+                gs     <= is_text ? G_ATTR_W : G_CODE;
             end
+
+            // Likewise for tx_addr, which needs f_attr.
+            G_ATTR_W: gs <= G_CODE;
 
             G_CODE: begin
                 if (is_text) begin
@@ -311,8 +326,9 @@ module tilemap_line (
         case (gs)
         G_ROWSC:  vram_addr = (layer_bg1 ? BG1_ROWSC : BG0_ROWSC) + {6'd0, row - 9'd8};
         G_GROUP:  vram_addr = (!is_text && layer_bg1) ? (COLSC + {9'd0, sx[8:3]}) : map_addr;
-        G_COLSC:  vram_addr = map_addr;
-        G_ATTR:   vram_addr = is_text ? tx_addr : (map_addr | 15'd1);
+        G_COLSC_W: vram_addr = map_addr;
+        G_ATTR:   vram_addr = map_addr | 15'd1;      // backgrounds; text waits
+        G_ATTR_W: vram_addr = tx_addr;
         default:  vram_addr = map_addr;
         endcase
     end
