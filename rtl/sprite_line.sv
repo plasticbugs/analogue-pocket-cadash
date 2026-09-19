@@ -62,8 +62,8 @@ module sprite_line (
     output logic [15:0] cycles
 );
     // ---------------------------------------------------------- the scanner
-    typedef enum logic [2:0] {
-        F_IDLE, F_Y, F_Y_W, F_ATTR, F_ATTR_W, F_CODE_W, F_X_W, F_FETCH
+    typedef enum logic [3:0] {
+        F_IDLE, F_Y, F_Y_W, F_Y_D, F_ATTR, F_ATTR_W, F_CODE_W, F_X_W, F_FETCH
     } fstate_t;
 
     fstate_t     fs;
@@ -83,10 +83,18 @@ module sprite_line (
         coord = (v > 9'd320) ? (11'(v) - 11'sd512) : 11'(v);
     endfunction
 
+    // The Y word is taken into a register (F_Y_W) before the hit test looks
+    // at it (F_Y_D).  Testing it straight off the table RAM put the RAM's
+    // read, the sign fix, the flip, two subtracts, two compares and the state
+    // register in one clock: 9.3 ns of 10.4, which met timing in one fit and
+    // missed by 0.3 ns at the cold corner in the next.  A missed entry costs
+    // three clocks instead of two; the line has the room.
+    logic        [8:0] y_q;
+    wire signed [10:0] c_y   = coord(y_q);
     wire signed [10:0] c_now = coord(tab_q[8:0]);
     // The flip adjustment is 320-x-16 and 256-y-16; the (0, 8) offsets go on
     // after it.
-    wire signed [10:0] y_adj = (flip_all ? (11'sd240 - c_now) : c_now) + 11'sd8;
+    wire signed [10:0] y_adj = (flip_all ? (11'sd240 - c_y) : c_y) + 11'sd8;
     wire signed [10:0] x_adj = (flip_all ? (11'sd304 - c_now) : c_now);
 
     wire signed [10:0] rel     = 11'(row) - y_adj;
@@ -110,6 +118,11 @@ module sprite_line (
             F_Y: fs <= F_Y_W;
 
             F_Y_W: begin
+                y_q <= tab_q[8:0];
+                fs  <= F_Y_D;
+            end
+
+            F_Y_D: begin
                 sub_y <= 4'(rel);
                 if (on_line) begin
                     fs <= F_ATTR;

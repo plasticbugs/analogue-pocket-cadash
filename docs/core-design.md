@@ -139,7 +139,7 @@ A line is 436 dot clocks, and at 96 MHz that is **6104 system clocks**.
 |---|---|---|
 | three tilemap passes | 41 groups each, the larger of 8 pixels and one fetch | 1891 |
 | sprites | 2 clocks per entry missed, the larger of 16 pixels and one fetch per hit | 1656 |
-| **worst line seen** | | **3589 of 6104** |
+| **worst line seen** | | **3840 of 6104** |
 
 The sprite numbers come from `tools/probe_sprites.lua` over a 75-second
 attract-mode run: the worst scanline anywhere in it has **68 sprites** on it
@@ -154,7 +154,7 @@ pixels and its fetch rather than the sum. That is what buys the headroom:
 | graphics ROM latency | worst line |
 |---|---|
 | 6 clocks | 2932 |
-| 12 clocks | 3589 |
+| 12 clocks | 3840 |
 | 20 clocks | 4739 |
 | 30 clocks | over budget |
 
