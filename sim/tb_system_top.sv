@@ -10,6 +10,7 @@
 module tb_system_top (
     input  logic        clk,
     input  logic        reset,
+    input  logic        pause,
 
     // loading: one word of the selected region per clock
     input  logic        ld_we,
@@ -136,7 +137,7 @@ module tb_system_top (
     logic [3:0] coin;
 
     cadash_core u_core (
-        .clk, .reset, .pix_sync(1'b0),
+        .clk, .reset, .pause, .pix_sync(1'b0),
         .mrom_req, .mrom_addr, .mrom_ack, .mrom_q,
         .srom_req, .srom_addr, .srom_ack, .srom_q,
         .tile_req, .tile_addr, .tile_ack, .tile_q,

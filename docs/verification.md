@@ -190,17 +190,26 @@ it is untested rather than proven.
 
 ## 7. The menu must not restart the game
 
-`sim/run_interact.sh` drives `platform/pocket/interface/interact.sv` the way
-the Pocket does and checks when the machine is reset: on the Reset Core
-command always, on a DIP, extra-DIP or service-switch write only when the word
-written differs from the one held, and never on a display option.
+Two gates, because there were two things wrong and the first one found was not
+the one that mattered.
 
-The Pocket writes the DIP register again whenever the menu closes, and the
-platform code reset on any write to it, so opening and closing the menu
-restarted the game. Cadash is the first of these cores to put its DIP switches
-in the menu, which is why the file it shares with Gaiapolis had never shown
-it. The gate fails four ways against the old code and passes against the new.
+**The pause.** `core_top.sv` ORed the Pocket's `pause_core` -- the menu being
+open -- into the machine's reset, so the board sat in reset for as long as the
+menu was up and booted from scratch when it closed. It is now a pause:
+`rtl/clk_enables.sv` freezes the 68000's, the Z80's and the YM2151's dividers
+and masks their enables with the same signal, so no phase is skipped or
+doubled, while the dot clock and the renderer carry on and the picture stays
+behind the menu. `sim/run_system.sh <rom> -frames 260 -pause 120 60` holds the
+menu open for sixty frames in the middle of the boot and reports three things:
+the 68000 read its reset vector once, it started no bus cycle while paused, and
+the frame it reaches is still MAME's title screen.
 
-That the Pocket rewrites the register on closing the menu is inferred from the
-symptom and the code, not observed on the bridge; the fix is right for any
-cause that amounts to an unchanged rewrite.
+**The switches.** `sim/run_interact.sh` checks that a DIP, extra-DIP or
+service write resets the machine only when it changes the word held. This was
+written first, on the theory that the Pocket rewrites the DIP register when the
+menu closes and the platform code reset on any write. The logic was wrong as it
+stood and the gate fails the old code four ways, but it was not the cause of
+the restart: v0.1.2 shipped this fix alone and the game still restarted. The
+gate proved the code did what was intended and said nothing about whether the
+intention was aimed at the right thing. What would have caught it sooner is
+listing every term in the reset equation before picking one.

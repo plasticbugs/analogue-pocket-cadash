@@ -16,6 +16,7 @@
 module clk_enables (
     input  logic clk,
     input  logic rst,
+    input  logic pause,     // hold both CPUs and the sound chip; see below
     output logic cen_phi1,
     output logic cen_phi2,
     output logic cen_z80,
@@ -31,17 +32,23 @@ module clk_enables (
             d6      <= 3'd0;
             d24     <= 5'd0;
             ym_half <= 1'b0;
-        end else begin
+        end else if (!pause) begin
             d6  <= (d6  == 3'd5)  ? 3'd0 : d6  + 3'd1;
             d24 <= (d24 == 5'd23) ? 5'd0 : d24 + 5'd1;
             if (cen_ym) ym_half <= ~ym_half;
         end
     end
 
-    assign cen_phi1  = (d6  == 3'd0);       // 96 / 6 = 16 MHz
-    assign cen_phi2  = (d6  == 3'd3);
-    assign cen_z80   = (d24 == 5'd1);       // 96 / 24 = 4 MHz
-    assign cen_ym    = (d24 == 5'd2);       // 96 / 24 = 4 MHz
+    // Pausing freezes the dividers and masks the enables with the same signal,
+    // so every count still produces exactly one pulse: nothing is skipped and
+    // nothing fires twice, and fx68k's two phases come back in the order they
+    // stopped.  The dot clock is not divided here and keeps running, which is
+    // what leaves the picture on the screen behind the Pocket's menu.
+    wire run = !pause;
+    assign cen_phi1  = run && (d6  == 3'd0);    // 96 / 6 = 16 MHz
+    assign cen_phi2  = run && (d6  == 3'd3);
+    assign cen_z80   = run && (d24 == 5'd1);    // 96 / 24 = 4 MHz
+    assign cen_ym    = run && (d24 == 5'd2);    // 96 / 24 = 4 MHz
     assign cen_ym_p1 = cen_ym && ym_half;   // half of it, as jt51 expects
 endmodule
 

@@ -47,12 +47,14 @@ int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     const char *rom_path = nullptr, *out_dir = nullptr;
     int frames = 240, lat = 12, coin_frame = 0, start_frame = 0;
+    int pause_from = 0, pause_len = 0;      // -pause F N: the Pocket's menu, open for N frames
     for (int i = 1; i < argc; i++) {
         if      (!strcmp(argv[i], "-o")      && i + 1 < argc) out_dir = argv[++i];
         else if (!strcmp(argv[i], "-frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-lat")    && i + 1 < argc) lat = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-coin")   && i + 1 < argc) coin_frame = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-start")  && i + 1 < argc) start_frame = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "-pause")  && i + 2 < argc) { pause_from = atoi(argv[++i]); pause_len = atoi(argv[++i]); }
         else if (!rom_path)                                   rom_path = argv[i];
     }
     if (!rom_path) {
@@ -72,6 +74,7 @@ int main(int argc, char **argv) {
 
     dut = new Vtb_system_top;
     dut->reset   = 1;
+    dut->pause   = 0;
     dut->rom_lat = lat;
     // Every input and DIP is active low; these are the factory settings from
     // docs/hardware.md section 5.
@@ -118,6 +121,7 @@ int main(int argc, char **argv) {
     std::vector<bool>     known(16384, false);
     long  ram_checked = 0, ram_bad = 0;
     bool  done_prev = false;
+    long  boots = 0, paused_cycles = 0;
     bool  vb_prev = false;
 
     const long limit = (long)frames * 262 * 436 * 14 + 4000000;
@@ -143,6 +147,11 @@ int main(int argc, char **argv) {
 
         // where the 68000 spends its time: one sample per bus cycle
         bool as = dut->m68k_as;
+        if (as && !as_prev) {
+            // address 0 is read exactly once per boot: the reset stack pointer
+            if (dut->m68k_addr == 0 && !dut->m68k_rw) boots++;   // m68k_rw is high for a write
+            if (dut->pause) paused_cycles++;
+        }
         if (as && !as_prev && frame >= frames - 4)
             pc_hist[(uint32_t)dut->m68k_addr << 1]++;
         as_prev = as;
@@ -200,6 +209,7 @@ int main(int argc, char **argv) {
         auto held = [&](int from) { return from && frame >= from && frame < from + 8; };
         dut->in2 = 0xff & ~((held(coin_frame) ? 0x01 : 0) |
                             (held(start_frame) ? 0x08 : 0));
+        dut->pause = pause_len && frame >= pause_from && frame < pause_from + pause_len;
     }
 
     int nonblank = 0;
@@ -244,6 +254,10 @@ int main(int argc, char **argv) {
     printf("picture: %d of %d indices non-zero\n", nonblank, W * H);
     printf("sound:   %ld non-zero samples, peak %ld\n", snd_nonzero, snd_peak);
     printf("main RAM: %ld reads checked, %ld wrong\n", ram_checked, ram_bad);
+    printf("68000 boots: %ld", boots);
+    if (pause_len) printf(", paused for %d frames from frame %d, bus cycles started while paused: %ld",
+                          pause_len, pause_from, paused_cycles);
+    printf("\n");
     printf("68000 vblank IRQs %u, PC060HA master accesses %u, slave %u\n",
            dut->n_irq, dut->n_ciu_m, dut->n_ciu_s);
     printf("Z80: %u NMIs, %u RAM writes, %u YM2151 writes, %u key-ons\n",

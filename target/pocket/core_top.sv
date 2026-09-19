@@ -923,8 +923,11 @@ module core_top
     always @(posedge clk_sys) begin vt_s <= vt; vt_d <= vt_s; end
     wire pix_sync = vt_s ^ vt_d;
 
+    //! pause_core is the Pocket's menu being open.  It used to be ORed into
+    //! reset here, which held the whole board in reset for as long as the menu
+    //! was up and booted it from scratch when the menu closed.
     cadash_core cd (
-        .clk(clk_sys), .reset(cd_reset | pause_core), .pix_sync(pix_sync),
+        .clk(clk_sys), .reset(cd_reset), .pause(pause_core), .pix_sync(pix_sync),
         .mrom_req(mrom_req), .mrom_addr(mrom_addr), .mrom_ack(mrom_ack), .mrom_q(mrom_q),
         .srom_req(srom_req), .srom_addr(srom_addr), .srom_ack(srom_ack), .srom_q(srom_q),
         .tile_req(tile_req), .tile_addr(tile_addr), .tile_ack(tile_ack), .tile_q(tile_q),

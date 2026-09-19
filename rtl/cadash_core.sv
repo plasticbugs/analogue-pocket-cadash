@@ -11,6 +11,7 @@
 module cadash_core (
     input  logic        clk,            // 96 MHz
     input  logic        reset,
+    input  logic        pause,          // freeze the machine, keep the picture
     input  logic        pix_sync,       // pins the dot divider to the video clock
 
     // ---------------- the ROM image ----------------
@@ -47,7 +48,7 @@ module cadash_core (
     logic cen_phi1, cen_phi2, cen_z80, cen_ym, cen_ym_p1;
 
     clk_enables u_cen (
-        .clk, .rst(reset),
+        .clk, .rst(reset), .pause,
         .cen_phi1, .cen_phi2, .cen_z80, .cen_ym, .cen_ym_p1
     );
 
