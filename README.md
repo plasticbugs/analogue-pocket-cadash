@@ -1,10 +1,9 @@
 # Cadash — Analogue Pocket core (openFPGA)
 
-**Work in progress.** This is not a working core yet: there is no 68000, no
-Z80, no YM2151, and no Pocket platform integration. What exists is the ROM
-path, a reference renderer proven pixel-identical to MAME, and video RTL that
-is being brought up against it. See "Status" below before expecting anything
-to run.
+**v0.1.0 — first release.** The core boots on a Pocket, runs the attract
+demo and plays. Video, sound and the ROM path are each verified against MAME
+in simulation; see "Status" below for exactly what has been proven and how,
+and for what has not.
 
 Cadash (Taito, 1989) on Taito's "Asuka" hardware — MAME set `cadash` (World),
 driver `taito/asuka.cpp`, main PCB `K1100528A`. A 320x240 horizontal
@@ -32,7 +31,7 @@ image) targets the World set and shares the rest.
 | Video timing | `rtl/video_timing.sv` | 436×262 raster at 96/14 MHz, within 0.06% of the board's real rate |
 | ROM image (1.6 MB) | `cadash.mra` + `tools/mra_build.py` | built and verified byte-for-byte against MAME's own loaded regions |
 | HD64180 link CPU (two-cabinet link play) | — | not implemented, not planned — MAME itself cannot run it either |
-| Pocket platform integration | `target/pocket/`, `platform/pocket/`, `pkg/pocket/` | Quartus 18.1 analysis and synthesis passes with no errors; never run on hardware |
+| Pocket platform integration | `target/pocket/`, `platform/pocket/`, `pkg/pocket/` | fits in 47% of the logic and closes timing at +0.647 ns (85 °C) / +0.610 ns (0 °C); boots and plays on a Pocket |
 
 What is actually proven, and how:
 
@@ -77,9 +76,24 @@ What is actually proven, and how:
   and the worst per-second RMS difference is 4.3%. MAME's attract mode is
   genuinely silent for at least fourteen seconds, which is why the comparison
   needs a coin, and which the core matches.
-* **It has never run on hardware.** Quartus 18.1 builds it, but no bitstream
-  has been loaded on a Pocket, so nothing below simulation is proven: not the
-  SDRAM timing, not the video hand-off, not the controls.
+* **The memory subsystem loads the image it is sent.** `sim/run_mem.sh` runs
+  the real SDRAM controller and download path against a behavioural SDRAM
+  chip, sends the whole 1,638,400-byte image at the Pocket loader's rate and
+  reads all 524,288 words back through the core's four ports: 0 wrong, and
+  clean at twice the loader's rate. This gate exists because the first build
+  to reach hardware did not boot -- the download corrupted one high byte in
+  several thousand words, differently on every power-up -- and nothing in
+  simulation had covered it. `docs/verification.md` section 6 has the story.
+* **It runs on hardware.** On a Pocket it boots through the self-test, runs
+  the attract demo and plays. That is one unit and an afternoon, not a soak
+  test: long sessions, two players and every DIP setting have not been tried.
+
+Known and open: during the first half-second after the core starts, while the
+68000's ROM cache is cold, the renderer loses the SDRAM to the CPU often
+enough that about eight scanlines a frame are abandoned and show the previous
+frame's pixels. It stops completely by frame 33 and the whole-machine bench
+still flags it (`sim/run_boot.sh` exits 1 on that condition alone; the frame
+it reaches is pixel-identical to MAME's).
 
 ## What's here
 
@@ -169,7 +183,7 @@ executable spec, and frozen-state benches as the regression gate that
 catches a video change before it reaches hardware. `docs/hardware.md` and
 `docs/core-design.md` are the products of phases 1–3 of that method for this
 board; `rtl/`, `sim/` and `target/` are phases 4 and 5. Phase 6, hardware,
-has not begun.
+began with v0.1.0.
 
 ## Credits
 
