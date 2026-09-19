@@ -185,3 +185,22 @@ for the controller to finish initialising before it starts sending. On the
 Pocket the host's transfer begins milliseconds after the core loads and the
 controller is ready 126 us in, so the window is not reachable in practice, but
 it is untested rather than proven.
+
+---
+
+## 7. The menu must not restart the game
+
+`sim/run_interact.sh` drives `platform/pocket/interface/interact.sv` the way
+the Pocket does and checks when the machine is reset: on the Reset Core
+command always, on a DIP, extra-DIP or service-switch write only when the word
+written differs from the one held, and never on a display option.
+
+The Pocket writes the DIP register again whenever the menu closes, and the
+platform code reset on any write to it, so opening and closing the menu
+restarted the game. Cadash is the first of these cores to put its DIP switches
+in the menu, which is why the file it shares with Gaiapolis had never shown
+it. The gate fails four ways against the old code and passes against the new.
+
+That the Pocket rewrites the register on closing the menu is inferred from the
+symptom and the code, not observed on the bridge; the fix is right for any
+cause that amounts to an unchanged rewrite.
