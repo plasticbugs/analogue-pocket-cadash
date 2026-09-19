@@ -1,6 +1,6 @@
 # Cadash — Analogue Pocket core (openFPGA)
 
-**v0.1.0 — first release.** The core boots on a Pocket, runs the attract
+**v0.1.1.** The core boots on a Pocket, runs the attract
 demo and plays. Video, sound and the ROM path are each verified against MAME
 in simulation; see "Status" below for exactly what has been proven and how,
 and for what has not.
