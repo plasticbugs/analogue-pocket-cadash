@@ -147,3 +147,41 @@ not.
   sample into the Pocket's filter domain, and it is handled the way
   METHODOLOGY section 5.4 says to: sampled at 48 kHz, held, handed over with
   a toggle. It has not been exercised on hardware.
+
+---
+
+## 6. The memory subsystem, and the hole it sat in
+
+`sim/run_mem.sh` runs the real `target/pocket/cadash_mem.sv` and
+`target/pocket/sdram_ctrl.sv` against a behavioural SDRAM chip, pushes the
+whole 1,638,400-byte image in through the download port at the APF loader's
+rate, and reads all 524,288 words back through the four core ports, comparing
+each against the image.
+
+It exists because everything above it did not cover any of that.
+`sim/tb_system_top.sv` answers both CPUs out of plain arrays with a fixed
+latency counter; it never instantiates the memory subsystem at all. So the
+controller, its four-client arbiter and the download path that fills SDRAM had
+no gate, and the core could pass every test in this document and still be
+unable to boot on hardware -- which is exactly what happened.
+
+What it caught the first time it ran: **3,535 of 524,288 words wrong**, every
+one of them with the right low byte and a wrong high byte. The download held a
+single pending word, and the even byte of the *next* word overwrote
+`dl_word[15:8]` while the previous word was still waiting for its ack, so the
+write that went out carried the next word's high byte. Which words were hit
+depended on refresh and row-change timing, so each power-up corrupted a
+different scatter of the ROM; on the panel that read as an illegal instruction
+at a different address every time, and as a black screen when the damage
+landed somewhere the game needed before it could draw its own error.
+
+The rate matters, so the gate takes it as an argument. The loader delivers at
+most one byte per 8 clocks; the write path is clean down to 4 and fails at 3,
+so there is about 2x of margin, and that is the number to re-measure if the
+SDRAM arbitration ever changes.
+
+What it still does not cover: the window before `ready`, since the bench waits
+for the controller to finish initialising before it starts sending. On the
+Pocket the host's transfer begins milliseconds after the core loads and the
+controller is ready 126 us in, so the window is not reachable in practice, but
+it is untested rather than proven.
