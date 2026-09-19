@@ -97,7 +97,10 @@ module cadash_sound (
     localparam int CLINES = 1024;
     (* ramstyle = "M10K" *) logic [7:0] crom_data [0:CLINES-1];
     (* ramstyle = "M10K" *) logic [5:0] crom_tag  [0:CLINES-1];
-    logic crom_valid [0:CLINES-1];
+    // Packed, and cleared as one assignment below.  A non-blocking write
+    // to an unpacked array inside a for loop is rejected by the older
+    // lint tool CI installs (BLKLOOPINIT), and this is the same flops.
+    logic [CLINES-1:0] crom_valid;
 
     wire [9:0] cidx = rom_a[9:0];
     wire [5:0] ctag = rom_a[15:10];
@@ -119,7 +122,7 @@ module cadash_sound (
         if (rst) begin
             rstate  <= R_IDLE;
             rom_req <= 1'b0;
-            for (int i = 0; i < CLINES; i++) crom_valid[i] <= 1'b0;
+            crom_valid <= '0;
         end else begin
             case (rstate)
                 R_IDLE: if (sel_rom && mem_rd) rstate <= R_LOOK;

@@ -135,7 +135,7 @@ module tilemap_line (
     // Background tiles live in the graphics ROM, one 32-bit word per row.
     wire  [2:0] bg_y     = f_attr[15] ? (3'd7 - fine_y) : fine_y;
 
-    wire  [8:0] grp_end  = fpx + 9'(8 - {6'd0, sx[2:0]});   // first x after this group
+    wire  [8:0] grp_end  = fpx + (9'd8 - {6'd0, sx[2:0]});   // first x after this group
     wire        hand_ok  = (gs == G_HAND) && !slot_full;
 
     always_ff @(posedge clk) begin
@@ -231,7 +231,7 @@ module tilemap_line (
             // Hand the group over as soon as the blitter has taken the last
             // one, and start on the next without waiting for it to be drawn.
             G_HAND: if (!slot_full) begin
-                sx  <= sx + 9'(8 - {6'd0, sx[2:0]});
+                sx  <= sx + (9'd8 - {6'd0, sx[2:0]});
                 fpx <= grp_end;
                 if (grp_end >= 9'd320) gs <= G_ENDPASS;
                 else if (is_fill)      gs <= G_HAND;

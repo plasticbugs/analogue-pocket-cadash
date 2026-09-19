@@ -161,7 +161,10 @@ module cadash_main (
     localparam int CLINES = 2048;
     (* ramstyle = "M10K" *) logic [15:0] crom_data [0:CLINES-1];
     (* ramstyle = "M10K" *) logic  [7:0] crom_tag  [0:CLINES-1];
-    logic crom_valid [0:CLINES-1];
+    // Packed, and cleared as one assignment below.  A non-blocking write
+    // to an unpacked array inside a for loop is rejected by the older
+    // lint tool CI installs (BLKLOOPINIT), and this is the same flops.
+    logic [CLINES-1:0] crom_valid;
 
     wire [10:0] cidx = cpu_addr[11:1];
     wire  [7:0] ctag = cpu_addr[19:12];
@@ -185,7 +188,7 @@ module cadash_main (
             rstate   <= R_IDLE;
             rom_req  <= 1'b0;
             rom_done <= 1'b0;
-            for (int i = 0; i < CLINES; i++) crom_valid[i] <= 1'b0;
+            crom_valid <= '0;
         end else begin
             rom_done <= 1'b0;
             case (rstate)
