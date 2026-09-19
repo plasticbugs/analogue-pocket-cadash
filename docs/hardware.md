@@ -415,3 +415,193 @@ Two smaller traps in MAME's Lua, both of which cost time here:
   the notifier chain outright: nothing errors, the machine runs on, and no
   callback ever fires again. Shadow write-only registers with write taps
   instead, and read state back through the chip's own ports.
+
+---
+
+## 11. The cabinet link
+
+Not implemented, and MAME does not emulate it either ("needs two MAME
+instances"), so everything here is read out of the two programs: the link
+CPU's ROM `c21-07.57`, disassembled in full, and the 68000's side of the
+shared RAM. There is no oracle for this section. It is a reading, checked for
+internal consistency -- every branch target in the listing below lands on an
+instruction boundary -- and nothing more.
+
+### 11.1 The link CPU's program is 234 bytes
+
+The ROM is 32 KB and all but `0000-00E9` is `FF`. The only HD64180-specific
+instructions in it are `IN0` and `OUT0`; there is no `MLT`, no MMU setup, no
+DMA, no timer and no interrupt handler. The internal registers it touches are
+the first serial channel's -- `CNTLA0` (00), `CNTLB0` (02), `STAT0` (04),
+`TDR0` (06), `RDR0` (08) -- plus `DCNTL` and `RCR` once each at start-up.
+
+```
+0000  DI
+0001  LD   SP,8800h            ; the stack is the top of the shared RAM
+0004  LD   A,10h : OUT0 (CNTLB0),A    ; odd parity, clock/10/16/1
+0009  ...                      ; short delay loop
+0012  LD   A,36h : OUT0 (CNTLA0),A    ; TE, RTS high, 8 bits + parity, 1 stop
+0017  LD   A,00h : OUT0 (STAT0),A     ; no serial interrupts
+001C  LD   A,40h : OUT0 (DCNTL),A     ; one memory wait state
+0021  LD   A,00h : OUT0 (RCR),A       ; DRAM refresh off
+0026  IN0  A,(RDR0)            ; flush
+0029  XOR  A : LD (8001h),A    ; error flag = 0
+002D  EI                       ; nothing is enabled and there is no handler
+002E  LD   DE,0                ; D = packets sent, E = packets received
+0031  LD   A,(8000h) : CP 'M'
+0036  JR   NZ,0074             ; anything but 'M' is a slave: start by listening
+
+      ; ---- send one packet
+0038  LD   A,'T' : LD (8002h),A
+003D  LD   A,(8080h) : OR A : JR Z,003D      ; wait for the 68000 to post one
+0043  CP   40h : JR NC,00C2                  ; 64 bytes or more is an error
+0047  LD   C,A : LD HL,8080h                 ; C = length, count byte included
+004B  LD   A,26h : OUT0 (CNTLA0),A           ; RTS low: "I have a byte"
+0050  IN0  A,(CNTLB0) : AND 20h : JR NZ,0050 ; wait for CTS low: "go on"
+0057  LD   B,(HL) : CALL 00C9                ; transmit it
+005B  IN0  A,(CNTLB0) : AND 20h : JR Z,005B  ; wait for CTS high: "got it"
+0062  LD   A,36h : OUT0 (CNTLA0),A           ; RTS high
+0067  INC  HL : DEC C : JR NZ,004B
+006B  XOR  A : LD (8080h),A                  ; sent: the 68000 may post another
+006F  INC  D : LD A,D : LD (8005h),A
+
+      ; ---- receive one packet
+0074  LD   A,'R' : LD (8002h),A
+0079  LD   HL,8100h
+007C  LD   A,(8100h) : OR A : JR NZ,007C     ; wait for the 68000 to take the last
+0082  IN0  A,(CNTLB0) : AND 20h : JR NZ,0082 ; wait for CTS low: "I have a byte"
+0089  LD   A,46h : OUT0 (CNTLA0),A           ; RE, RTS low: "go on"
+008E  CALL 00D8 : LD (HL),A : LD C,A         ; the first byte is the length
+0093  JR   00A5
+0095  IN0  A,(CNTLB0) : AND 20h : JR NZ,0095
+009C  LD   A,46h : OUT0 (CNTLA0),A
+00A1  CALL 00D8 : LD (HL),A
+00A5  LD   A,56h : OUT0 (CNTLA0),A           ; RE, RTS high: "got it"
+00AA  INC  HL : DEC C : JR Z,00B7
+00AE  IN0  A,(CNTLB0) : AND 20h : JR Z,00AE  ; wait for the sender's RTS high
+00B5  JR   0095
+00B7  INC  E : LD A,E : LD (8006h),A
+00BC  LD   A,(C000h)                         ; a strobe; the value is discarded
+00BF  JP   0038                              ; and now it is this side's turn
+
+00C2  LD   A,'E' : LD (8001h),A : JR 00C2    ; any error: flag it and stop dead
+
+00C9  IN0  A,(STAT0) : LD (8003h),A : AND 02h : JR Z,00C9   ; wait for TDRE
+00D3  LD   A,B : OUT0 (TDR0),A : RET
+00D8  IN0  A,(STAT0) : LD (8004h),A : AND F0h : JR Z,00D8   ; wait for RDRF or an error
+00E2  AND  70h : JR NZ,00C2                                  ; overrun, parity, framing
+00E6  IN0  A,(RDR0) : RET
+```
+
+### 11.2 What that means
+
+* **Both boards run the same loop and differ only in where they enter it.**
+  The master sends first; the slave listens first. After that each side
+  alternates send, receive, send. The two are never transmitting at once:
+  it is strict ping-pong, one packet each way per exchange.
+* **The line is asynchronous serial with a hardware handshake on every byte.**
+  8 data bits, odd parity, 1 stop. The rate is the CPU clock divided by 160:
+  25,000 baud if the 8 MHz in MAME's driver is the crystal (the HD64180 halves
+  it), 50,000 if it is the clock itself. Four signals cross between the
+  boards, plus ground: `TXA0` to the other side's `RXA0`, and `RTS0` to the
+  other side's `CTS0`, in both directions. For each byte the sender drops
+  RTS, waits for the receiver to drop its own, transmits, waits for the
+  receiver to raise RTS again, and raises its own.
+* **The shared RAM is the whole interface to the 68000.** The Z180's
+  `8000-87FF` is the 68000's `800000-800FFF`, one byte per word address, so
+  Z180 address `8000h + n` is 68000 address `800000h + 2n`.
+
+| Z180 | 68000 | who writes it | meaning |
+|---|---|---|---|
+| `8000` | `800000` | 68000, at boot | `'M'` master, `'S'` otherwise |
+| `8001` | `800002` | Z180 | `'E'` after any error; the Z180 has stopped |
+| `8002` | `800004` | Z180 | `'T'` while sending, `'R'` while receiving |
+| `8003`, `8004` | `800006`, `800008` | Z180 | last `STAT0` seen while sending / receiving |
+| `8005`, `8006` | `80000A`, `80000C` | Z180 | packets sent / received, mod 256 |
+| `8080-80BF` | `800100-` | 68000, then Z180 clears `8080` | outgoing packet; writing the length byte last launches it |
+| `8100-813F` | `800200-` | Z180, then 68000 clears `8100` | incoming packet; the Z180 will not receive another until the length byte is zero |
+| `87FE-87FF` | `800FFC-` | Z180 | its stack: two bytes, the one `CALL` deep it ever goes |
+
+MAME's comment calls `8080` "slave data" and `8100` "master data". They are
+the transmit and receive buffers, the same way round on both boards.
+
+### 11.3 The 68000's side
+
+`00B0C` clears all of `800000-800FFF`, then reads DSWB: bit 7 set writes
+`'M'` to `800000`, clear writes `'S'`.
+
+`0490E` builds a packet at `800100`: the length, the two player-input words
+(`900004` and `900006`, this frame's or last frame's depending on the sign of
+the link-mode byte at `$3404(A5)`), up to 63 queued event bytes from
+`$3420(A5)`, and a checksum that makes the bytes sum to zero. The length is
+written last. If the previous packet is still waiting and the board is linked,
+the 68000 **spins until the Z180 clears the length byte**, so the link's speed
+is part of the game's timing. This routine runs in stand-alone mode too.
+
+`048A0` takes a packet from `800200`: copies it to `$351A(A5)`, checks the
+sum, clears the length byte to release the Z180, and sets `$3405(A5)`. A bad
+sum while linked prints `COMMUNICATION CHECKSUM ERROR`, writes 0 to `080000`
+and halts with interrupts masked.
+
+### 11.4 What is still not known
+
+* **What holds the Z180 back at power-up.** It reads `8000` within a few
+  milliseconds of reset, and the 68000 does not write `'M'` there until after
+  its RAM test. MAME's author suspected a missing halt line. One candidate is
+  in plain sight: the 68000's first instruction after masking interrupts is to
+  write 0 to `080000`; it writes `10h` or `13h` there only once `'M'`/`'S'` is
+  in place; and its fatal link-error path writes 0 there again before halting.
+  MAME maps `080000` to the sprite chip's control register and knows no
+  meaning for bit 4 beyond the colour bank. Bit 4 releasing the Z180's reset
+  would fit all three writes. So would coincidence. An implementation does not
+  need to settle it: holding the link CPU until `800000` has been written is
+  correct under either reading.
+* **The read of `C000`** after every received packet. Nothing is mapped there
+  and the value is thrown away, so it is a strobe -- a watchdog, a lamp, an
+  interrupt nobody takes. The 68000 polls the length bytes and does not need
+  one.
+* **`EI` with no handler.** `STAT0` is written 0, so the serial channel raises
+  nothing, and the NMI vector at `0066` is the middle of an instruction. If
+  `INT0` is wired to anything the program would not survive it; presumably it
+  is not.
+* **`DCD0`** must be low or the HD64180's receiver never sets `RDRF`.
+  Presumably strapped.
+* **What two linked cabinets actually show.** Four players, by the input words
+  in the packet; whether the screens follow each other is a question for
+  someone with two boards.
+
+### 11.5 On the Pocket
+
+The link port gives the core four pins with direction control and imposes no
+protocol (`port_tran_si`, `_so`, `_sck`, `_sd` in `core_top.sv`, tri-stated
+today). The board wants four directed signals and a Game Boy cable crosses
+only SO to SI each way, with SCK shared, so the wires cannot be mapped one for
+one -- while a side waits in `36h` for its peer to start sending, both believe
+they are the transmitter, and a shared handshake wire would be driven from
+both ends.
+
+They do not need to be. Both ends of the cable are this core, so the
+handshake can travel in band: each side's SO carries short frames that are
+either a data byte or a change in its RTS level, in the order they happened,
+at a rate far above 25,000 baud so the added delay is a few percent of a bit.
+That needs SO, SI and ground -- a Game Boy / Game Boy Color cable -- and no
+direction switching at all.
+
+A Game Boy Advance cable is a different animal: SO reaches the other end's SI
+in one direction only, and SD is the wire both ends share. Because the
+protocol is strict ping-pong it could still be carried, by terminating the
+per-byte handshake locally at each end and shipping whole packets alternately
+over SD. That is a second, harder design, and the cable's wiring should be
+confirmed with a meter first.
+
+The link CPU itself can be done two ways. **Run the real ROM**: TV80 is a Z80
+and treats `ED 38`/`ED 39` as no-ops, so it would need `IN0`/`OUT0` added --
+a change to a vendored core that is otherwise kept exactly as upstream -- plus
+a one-channel ASCI, and `c21-07.57` added to the ROM image. **Or replace it**
+with a state machine that honours the shared-RAM contract in section 11.2,
+which is all the 68000 can see. The program is small enough that the second
+is a fair reading of the first, and it can be checked: a twenty-opcode
+interpreter running the real 234 bytes makes an executable reference for the
+state machine, and two copies of the whole machine wired back to back in
+Verilator make the system test. Neither is MAME, and neither is two real
+boards.
