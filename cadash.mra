@@ -21,7 +21,7 @@
          8-pixel row of a character is already four consecutive bytes and
          needs no plane interleaving.  What it does need is the byte swap that
          MAME's ROM_LOAD16_WORD_SWAP applies: file byte i belongs at offset
-         i xor 1.  That is what map="21" does to a single part.  With it, the
+         i xor 1.  That is what map="12" does to a single part.  With it, the
          core reads a whole tile row as one aligned 32-bit word.
 
          The HD64180 link ROM (c21-07.57) and the four PAL dumps are not in
@@ -30,12 +30,12 @@
     <rom index="0" zip="cadash.zip" md5="f3532d7e5cf3727ba1590b83e5bf68ed">
         <!-- 68000 program, 512 KB -->
         <interleave output="16">
-            <part name="c21_14.ic11" crc="5daf13fb" map="10"/>
-            <part name="c21_16.ic15" crc="cbaa2e75" map="01"/>
+            <part name="c21_14.ic11" crc="5daf13fb" map="01"/>
+            <part name="c21_16.ic15" crc="cbaa2e75" map="10"/>
         </interleave>
         <interleave output="16">
-            <part name="c21_13.ic10" crc="6b9e0ee9" map="10"/>
-            <part name="c21_17.ic14" crc="bf9a578a" map="01"/>
+            <part name="c21_13.ic10" crc="6b9e0ee9" map="01"/>
+            <part name="c21_17.ic14" crc="bf9a578a" map="10"/>
         </interleave>
 
         <!-- Z80 sound program, 64 KB -->
@@ -43,12 +43,12 @@
 
         <!-- TC0100SCN tile graphics, 512 KB -->
         <interleave output="16">
-            <part name="c21-02.9" crc="205883b9" map="21"/>
+            <part name="c21-02.9" crc="205883b9" map="12"/>
         </interleave>
 
         <!-- PC090OJ sprite graphics, 512 KB -->
         <interleave output="16">
-            <part name="c21-01.1" crc="1ff6f39c" map="21"/>
+            <part name="c21-01.1" crc="1ff6f39c" map="12"/>
         </interleave>
     </rom>
 
