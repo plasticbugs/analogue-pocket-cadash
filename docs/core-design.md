@@ -172,7 +172,8 @@ under contention with both CPUs.
 * **Wide tilemap mode.** Cadash never sets `ctrl[6]` bit 4.
 * **Screen flip.** `ctrl[7]` bit 0 and the PC090OJ's own flip bit are
   implemented but unverified: the game never asks for either, even with the
-  Flip Screen DIP on.
+  Flip Screen DIP on.  The DIP itself has since left the menu (its entry
+  went to the Analogizer's) and `core_top` forces it to normal.
 
 
 ---

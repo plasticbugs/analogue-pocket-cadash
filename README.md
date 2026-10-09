@@ -95,6 +95,23 @@ frame's pixels. It stops completely by frame 33 and the whole-machine bench
 still flags it (`sim/run_boot.sh` exits 1 on that condition alone; the frame
 it reaches is pixel-identical to MAME's).
 
+## Analogizer
+
+The core supports RndMnkIII's [Analogizer](https://github.com/RndMnkIII/Analogizer)
+adapter: the core's 15.73 kHz picture out of the VGA port (RGBS, RGsB,
+YPbPr, Y/C, or scandoubled for a VGA monitor), and SNAC controllers in.  It
+is set up in the core's own menu (Analogizer, Analogizer Video, SNAC
+Adapter, SNAC Assignment, and H and V Position to centre the picture on the
+CRT); with "Analogizer" off, the default, the core is unchanged.  Because
+the core declares a cartridge adapter, the Pocket powers the slot: take any
+game cartridge out first.  `docs/analogizer.md` has the modes, the
+controller assignments and what has and has not been checked (the path is
+proven in simulation; no Analogizer has been tried with this core yet).
+
+To fit the Pocket's 16 menu entries, three left the menu with it:
+**Scanlines** and **Shadow Mask** (now always off) and **Flip Screen** (the
+board's flip DIP, now always normal).
+
 ## What's here
 
 | Path | What it is |
@@ -151,6 +168,8 @@ sh sim/run_boot.sh             # the whole machine from reset vs MAME's title sc
 sh sim/run_sound.sh            # the coin sound, core vs MAME, second by second
 sh sim/run_ym.sh               # the YM2151 alone, driven the way the core drives it
 sh sim/lint.sh                 # every module linted on its own
+sh sim/run_analogizer.sh       # the Analogizer path, read at the cartridge pins
+python3 tools/check_json.py pkg/pocket --active 320x240   # what the firmware refuses
 ```
 
 `regress_render.sh` is pure Python; it builds a ROM image with
@@ -256,6 +275,12 @@ None of these are in this repository yet â€” there is no `modules/` directory â€
 so nothing above is currently compiled into anything. They're listed here so
 the project's eventual licensing position is clear ahead of time rather than
 discovered later.
+
+Analogizer support: **RndMnkIII**'s adapter and its `openFPGA_Pocket_Analogizer`
+module (`target/pocket/analogizer/`, GPL-3.0-or-later), with **Mike
+Simone**'s Y/C encoder and MiSTer's scandoubler and HQ2x (**Sorgelig**,
+**Ludvig Strigeus**) inside it; the wrapper and menu scheme are the
+pocket-core-template's.
 
 ## Licence
 

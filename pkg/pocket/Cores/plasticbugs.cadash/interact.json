@@ -20,82 +20,9 @@
         "defaultval": 0,
         "mask": "0xFFFFFFF9",
         "options": [
-          {
-            "name": "Square Pixels",
-            "value": "0x00000000"
-          },
-          {
-            "name": "Fill Screen",
-            "value": "0x00000002"
-          }
+          {"name": "Square Pixels", "value": "0x00000000"},
+          {"name": "Fill Screen", "value": "0x00000002"}
         ]
-      },
-      {
-        "name": "Scanlines",
-        "id": 61,
-        "type": "list",
-        "enabled": true,
-        "persist": true,
-        "address": "0xF3000000",
-        "defaultval": 0,
-        "mask": "0xFFFFFFFC",
-        "options": [
-          {
-            "name": "Off",
-            "value": "0x00000000"
-          },
-          {
-            "name": "25%",
-            "value": "0x00000001"
-          },
-          {
-            "name": "50%",
-            "value": "0x00000002"
-          },
-          {
-            "name": "75%",
-            "value": "0x00000003"
-          }
-        ]
-      },
-      {
-        "name": "Shadow Mask",
-        "id": 62,
-        "type": "list",
-        "enabled": true,
-        "persist": true,
-        "address": "0xF3000000",
-        "defaultval": 0,
-        "mask": "0xFFFFFF8F",
-        "options": [
-          {
-            "name": "Off",
-            "value": "0x00000000"
-          },
-          {
-            "name": "1x",
-            "value": "0x00000010"
-          },
-          {
-            "name": "2x",
-            "value": "0x00000020"
-          },
-          {
-            "name": "3x",
-            "value": "0x00000030"
-          }
-        ]
-      },
-      {
-        "name": "Flip Screen",
-        "id": 11,
-        "type": "check",
-        "enabled": true,
-        "persist": true,
-        "address": "0xF1000000",
-        "defaultval": 0,
-        "mask": "0xFFFFFFFD",
-        "value": "0x00000002"
       },
       {
         "name": "Service Mode",
@@ -129,22 +56,10 @@
         "defaultval": 0,
         "mask": "0xFFFFFFCF",
         "options": [
-          {
-            "name": "1 Coin/1 Credit",
-            "value": "0x00000000"
-          },
-          {
-            "name": "2 Coins/1 Credit",
-            "value": "0x00000010"
-          },
-          {
-            "name": "3 Coins/1 Credit",
-            "value": "0x00000020"
-          },
-          {
-            "name": "4 Coins/1 Credit",
-            "value": "0x00000030"
-          }
+          {"name": "1 Coin/1 Credit", "value": "0x00000000"},
+          {"name": "2 Coins/1 Credit", "value": "0x00000010"},
+          {"name": "3 Coins/1 Credit", "value": "0x00000020"},
+          {"name": "4 Coins/1 Credit", "value": "0x00000030"}
         ]
       },
       {
@@ -157,22 +72,10 @@
         "defaultval": 0,
         "mask": "0xFFFFFF3F",
         "options": [
-          {
-            "name": "1 Coin/2 Credits",
-            "value": "0x00000000"
-          },
-          {
-            "name": "1 Coin/3 Credits",
-            "value": "0x00000040"
-          },
-          {
-            "name": "1 Coin/4 Credits",
-            "value": "0x00000080"
-          },
-          {
-            "name": "1 Coin/6 Credits",
-            "value": "0x000000C0"
-          }
+          {"name": "1 Coin/2 Credits", "value": "0x00000000"},
+          {"name": "1 Coin/3 Credits", "value": "0x00000040"},
+          {"name": "1 Coin/4 Credits", "value": "0x00000080"},
+          {"name": "1 Coin/6 Credits", "value": "0x000000C0"}
         ]
       },
       {
@@ -185,22 +88,10 @@
         "defaultval": 0,
         "mask": "0xFFFFFCFF",
         "options": [
-          {
-            "name": "Medium",
-            "value": "0x00000000"
-          },
-          {
-            "name": "Easy",
-            "value": "0x00000100"
-          },
-          {
-            "name": "Hard",
-            "value": "0x00000200"
-          },
-          {
-            "name": "Hardest",
-            "value": "0x00000300"
-          }
+          {"name": "Medium", "value": "0x00000000"},
+          {"name": "Easy", "value": "0x00000100"},
+          {"name": "Hard", "value": "0x00000200"},
+          {"name": "Hardest", "value": "0x00000300"}
         ]
       },
       {
@@ -213,22 +104,10 @@
         "defaultval": 0,
         "mask": "0xFFFFF3FF",
         "options": [
-          {
-            "name": "7:00",
-            "value": "0x00000000"
-          },
-          {
-            "name": "8:00",
-            "value": "0x00000400"
-          },
-          {
-            "name": "6:00",
-            "value": "0x00000800"
-          },
-          {
-            "name": "5:00",
-            "value": "0x00000C00"
-          }
+          {"name": "7:00", "value": "0x00000000"},
+          {"name": "8:00", "value": "0x00000400"},
+          {"name": "6:00", "value": "0x00000800"},
+          {"name": "5:00", "value": "0x00000C00"}
         ]
       },
       {
@@ -241,22 +120,10 @@
         "defaultval": 0,
         "mask": "0xFFFFCFFF",
         "options": [
-          {
-            "name": "Default",
-            "value": "0x00000000"
-          },
-          {
-            "name": "Default +1:00",
-            "value": "0x00001000"
-          },
-          {
-            "name": "Default -1:00",
-            "value": "0x00002000"
-          },
-          {
-            "name": "Default -2:00",
-            "value": "0x00003000"
-          }
+          {"name": "Default", "value": "0x00000000"},
+          {"name": "Default +1:00", "value": "0x00001000"},
+          {"name": "Default -1:00", "value": "0x00002000"},
+          {"name": "Default -2:00", "value": "0x00003000"}
         ]
       },
       {
@@ -269,6 +136,106 @@
         "defaultval": 0,
         "mask": "0xFFFFFEFF",
         "value": "0x00000100"
+      },
+      {
+        "name": "Analogizer",
+        "id": 70,
+        "type": "list",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000000",
+        "defaultval": 0,
+        "mask": "0xFFFFBFDF",
+        "options": [
+          {"name": "Off", "value": "0x0000"},
+          {"name": "On", "value": "0x0020"},
+          {"name": "On, Pocket off", "value": "0x4020"}
+        ]
+      },
+      {
+        "name": "Analogizer Video",
+        "id": 71,
+        "type": "list",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000000",
+        "defaultval": 0,
+        "mask": "0xFFFFC3FF",
+        "options": [
+          {"name": "RGBS", "value": "0x0000"},
+          {"name": "RGsB", "value": "0x0400"},
+          {"name": "YPbPr", "value": "0x0800"},
+          {"name": "Y/C NTSC", "value": "0x0C00"},
+          {"name": "Y/C PAL", "value": "0x1000"},
+          {"name": "Scandoubler", "value": "0x1400"},
+          {"name": "Scandoubler 25%", "value": "0x1800"},
+          {"name": "Scandoubler 50%", "value": "0x1C00"},
+          {"name": "Scandoubler 75%", "value": "0x2000"},
+          {"name": "Scandoubler HQ2x", "value": "0x2400"}
+        ]
+      },
+      {
+        "name": "SNAC Adapter",
+        "id": 72,
+        "type": "list",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000000",
+        "defaultval": 0,
+        "mask": "0xFFFFFFE0",
+        "options": [
+          {"name": "None", "value": "0x00"},
+          {"name": "DB15", "value": "0x01"},
+          {"name": "NES", "value": "0x02"},
+          {"name": "SNES", "value": "0x03"},
+          {"name": "PCE 2-button", "value": "0x04"},
+          {"name": "PCE 6-button", "value": "0x05"},
+          {"name": "PCE Multitap", "value": "0x06"},
+          {"name": "DB15 Fast", "value": "0x09"},
+          {"name": "SNES A,B<->X,Y", "value": "0x0B"},
+          {"name": "PSX Digital", "value": "0x10"},
+          {"name": "PSX Digital Fast", "value": "0x11"},
+          {"name": "PSX Analog", "value": "0x12"},
+          {"name": "PSX Analog Fast", "value": "0x13"}
+        ]
+      },
+      {
+        "name": "SNAC Assignment",
+        "id": 73,
+        "type": "list",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000000",
+        "defaultval": 0,
+        "mask": "0xFFFFFC3F",
+        "options": [
+          {"name": "SNAC P1 -> P1", "value": "0x000"},
+          {"name": "SNAC P1 -> P2", "value": "0x040"},
+          {"name": "SNAC P1,P2 -> P1,P2", "value": "0x080"},
+          {"name": "SNAC P1,P2 -> P2,P1", "value": "0x0C0"},
+          {"name": "SNAC P1,P2 -> P3,P4", "value": "0x100"},
+          {"name": "SNAC P1-P4 -> P1-P4", "value": "0x140"}
+        ]
+      },
+      {
+        "name": "Analogizer H Position",
+        "id": 74,
+        "type": "slider_u32",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000004",
+        "defaultval": 0,
+        "graphical": {"signed": true, "min": -28, "max": 20, "adjust_small": 1, "adjust_large": 4}
+      },
+      {
+        "name": "Analogizer V Position",
+        "id": 75,
+        "type": "slider_u32",
+        "enabled": true,
+        "persist": true,
+        "address": "0xF7000008",
+        "defaultval": 0,
+        "graphical": {"signed": true, "min": -12, "max": 4, "adjust_small": 1, "adjust_large": 4}
       }
     ]
   }

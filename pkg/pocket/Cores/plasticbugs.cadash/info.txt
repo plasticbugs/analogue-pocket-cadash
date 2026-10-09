@@ -28,5 +28,11 @@ Controls
 * Select  insert coin
 * Start   start
 
-The menu carries both DIP banks, the
-screen shape, scanlines and a mask.
+The menu carries both DIP banks and
+the screen shape.
+
+Analogizer: CRT video and SNAC pads,
+set in this core's menu (Analogizer:
+On; H and V Position centre the
+picture). The slot is powered: remove
+any cartridge first.

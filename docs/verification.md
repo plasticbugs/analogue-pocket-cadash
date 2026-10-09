@@ -213,3 +213,39 @@ the restart: v0.1.2 shipped this fix alone and the game still restarted. The
 gate proved the code did what was intended and said nothing about whether the
 intention was aimed at the right thing. What would have caught it sooner is
 listing every term in the reset equation before picking one.
+
+---
+
+## 8. The Analogizer — a minute
+
+`sim/run_analogizer.sh` drives `target/pocket/pocket_analogizer.sv` and the
+vendored adapter module at this core's raster and clocks and reads the
+cartridge pins as the adapter's DAC does: every menu option set the way the
+firmware sets it, every visible dot in RGBS, the scandoubler's line count
+and period, the two position sliders at both ends of their range, and the
+SNAC mappings.  `docs/analogizer.md` lists what it measured and what it does
+not cover.  On hardware, in this order -- each step's reading tells the next
+one where to look:
+
+1. **Menu "Analogizer: Off"** (the default).  The core must play exactly as
+   without the adapter, Pocket screen and controls.  This build also moved
+   the SDRAM clock (two PLL steps earlier, to close the read capture's
+   timing): torn or garbled graphics, or a failed boot, point there first.
+   Otherwise, if anything differs, the cartridge port is not idle: stop
+   there.
+2. **Analogizer On, Video RGBS, SNAC Adapter None.**  The same picture on
+   the Pocket and on the CRT, 15.73 kHz / 60.03 Hz.  The bring-up panel
+   shows on the CRT too.  No picture at all: say whether the CRT reports a
+   signal (sync but no colour points at the DAC clock; nothing points at
+   sync).
+3. **Each other video mode** (RGsB and YPbPr need the SOG switch on).
+4. **SNAC**: one pad, "SNAC P1 -> P1"; the Pocket's own controls are then
+   player 2.
+5. **The menu's memory**: change Video, quit and reload; it and
+   "Analogizer: On" should still be there, and changing one entry should
+   leave the others alone.
+6. **Position**: "Analogizer V Position" + moves the picture down by that
+   many lines (4 at most on this board), + on "H Position" to the right.
+   Try a negative value early: that the firmware writes a signed slider as
+   the core reads it is not proven.
+

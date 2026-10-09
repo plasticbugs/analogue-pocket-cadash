@@ -17,8 +17,13 @@ set_clock_groups -asynchronous \
  -group { ic|pocket_audio_mixer|audio_pll|mf_audio_pll_inst|altera_pll_i|general[1].gpll~PLL_OUTPUT_COUNTER|divclk }
 
 # SDRAM: the chip is clocked by the phase-shifted PLL output, carried over
-# from the Gaiapolis core with the same controller and the same 6.51 ns
-# shift, which is proven on the panel there.
+# from the Gaiapolis core with the same controller and a 6.51 ns shift,
+# proven on the panel there and on this core's first hardware runs.  Adding
+# the Analogizer's 48 MHz clock (general[4]) moved the clock network, and at
+# 6.51 ns the read capture (dram_dq -> dq_in) missed setup by 0.255 ns at
+# slow 0C with 0.98 ns of hold to spare at fast 0C.  The shift is now two of
+# the PLL's 186 ps steps earlier (VCO 672 MHz), 6.138 ns: the least that
+# closes setup.  The balanced point is about 6.51 - 0.62 = 5.89 ns.
 create_generated_clock -name dram_clk -source \
     [get_pins {ic|core_pll|core_pll_inst|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk}] \
     [get_ports {dram_clk}]
