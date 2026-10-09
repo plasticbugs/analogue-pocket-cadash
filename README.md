@@ -105,8 +105,8 @@ Adapter, SNAC Assignment, and H and V Position to centre the picture on the
 CRT); with "Analogizer" off, the default, the core is unchanged.  Because
 the core declares a cartridge adapter, the Pocket powers the slot: take any
 game cartridge out first.  `docs/analogizer.md` has the modes, the
-controller assignments and what has and has not been checked (the path is
-proven in simulation; no Analogizer has been tried with this core yet).
+controller assignments and what has and has not been checked. Confirmed on
+a Pocket with an Analogizer and a CRT (0.2.0).
 
 To fit the Pocket's 16 menu entries, three left the menu with it:
 **Scanlines** and **Shadow Mask** (now always off) and **Flip Screen** (the

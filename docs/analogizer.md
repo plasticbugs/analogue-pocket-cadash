@@ -81,8 +81,9 @@ steers with its left stick.
 so the Pocket powers the slot whether or not an Analogizer is in it. Do not
 leave a game cartridge in the slot while this core runs.
 
-**Not yet run on hardware with this core.** The same wrapper and adapter
-module drive a CRT in Moo Mesa (2026-10-08). What has been checked here is
+**Confirmed on a Pocket with an Analogizer and a CRT** (0.2.0, bitstream
+792e78e3, with the SDRAM clock at 6.138 ns); SNAC controllers not yet
+tried. What has been checked here is
 listed under
 *What was measured* below. Send problems with the adapter itself to the
 Analogizer project.
@@ -248,8 +249,7 @@ PLL steps (186 ps each) earlier: the least that closes it
 (`projects/cadash_pocket.sdc`).  It is the one change here that reaches the
 game itself on hardware, whatever the menu says.
 
-**Not proven:** anything on hardware with this core, the SDRAM shift
-included; that the firmware
+**Not proven:** SNAC controllers on hardware with this core; that the firmware
 writes a signed slider as a two's complement word (Analogue's docs show
 signed sliders, no installed core here uses one); a menu with 54 options in
 all (Analogue says list options do not count toward the limit; the most
